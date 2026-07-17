@@ -179,6 +179,50 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
     });
   }
 
+  // Источник топлива — используется и в обычном потоке, и внутри закреплённого
+  // блока выбора техники (чтобы «Счёт АЗС / Бензовоз» не уезжал при листании).
+  const sourceBlock = (
+    <div className="flex flex-col gap-2">
+      <Label>Источник топлива</Label>
+      <div className="flex flex-wrap gap-2">
+        {cards.map((c) => {
+          const key = `card:${c.id}`;
+          return (
+            <Button
+              key={key}
+              type="button"
+              variant={sourceKey === key ? "default" : "outline"}
+              className="h-12"
+              onClick={() => chooseSource(key)}
+            >
+              {c.card_number}
+            </Button>
+          );
+        })}
+        {tankers.map((t) => {
+          const key = `tanker:${t.id}`;
+          return (
+            <Button
+              key={key}
+              type="button"
+              variant={sourceKey === key ? "default" : "outline"}
+              className="h-12"
+              onClick={() => chooseSource(key)}
+            >
+              {t.name}
+            </Button>
+          );
+        })}
+      </div>
+      {sourceType === "tanker" ? (
+        <p className={cn("text-sm", overBalance ? "text-destructive" : "text-muted-foreground")}>
+          Остаток бензовоза: {fmtLiters(tankerBalance)}
+          {overBalance ? " · выдаётся больше остатка!" : ""}
+        </p>
+      ) : null}
+    </div>
+  );
+
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-6 pb-28">
       {done ? (
@@ -191,66 +235,32 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
         </div>
       ) : null}
 
-      {/* 1. Источник */}
-      <section className="flex flex-col gap-2">
-        <Label>Источник топлива</Label>
-        <div className="flex flex-wrap gap-2">
-          {cards.map((c) => {
-            const key = `card:${c.id}`;
-            return (
-              <Button
-                key={key}
-                type="button"
-                variant={sourceKey === key ? "default" : "outline"}
-                className="h-12"
-                onClick={() => chooseSource(key)}
-              >
-                {c.card_number}
+      {/* 1–2. Источник + техника */}
+      {vehicle ? (
+        <>
+          <section>{sourceBlock}</section>
+          <section className="flex flex-col gap-2">
+            <Label>Техника</Label>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="text-xl font-bold tracking-tight">{vehicle.reg_number}</p>
+                <p className="text-sm text-muted-foreground">
+                  {vehicle.brand} · {vehicleTypeLabel(vehicle.vehicle_type)}
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setVehicleId(null)}>
+                Сменить
               </Button>
-            );
-          })}
-          {tankers.map((t) => {
-            const key = `tanker:${t.id}`;
-            return (
-              <Button
-                key={key}
-                type="button"
-                variant={sourceKey === key ? "default" : "outline"}
-                className="h-12"
-                onClick={() => chooseSource(key)}
-              >
-                {t.name}
-              </Button>
-            );
-          })}
-        </div>
-        {sourceType === "tanker" ? (
-          <p className={cn("text-sm", overBalance ? "text-destructive" : "text-muted-foreground")}>
-            Остаток бензовоза: {fmtLiters(tankerBalance)}
-            {overBalance ? " · выдаётся больше остатка!" : ""}
-          </p>
-        ) : null}
-      </section>
-
-      {/* 2. Техника */}
-      <section className="flex flex-col gap-2">
-        <Label>Техника</Label>
-        {vehicle ? (
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div>
-              <p className="text-xl font-bold tracking-tight">{vehicle.reg_number}</p>
-              <p className="text-sm text-muted-foreground">
-                {vehicle.brand} · {vehicleTypeLabel(vehicle.vehicle_type)}
-              </p>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setVehicleId(null)}>
-              Сменить
-            </Button>
-          </div>
-        ) : (
+          </section>
+        </>
+      ) : (
+        <section>
           <VehiclePicker
             vehicles={vehicles}
             onSelect={(v) => selectVehicle(v.id)}
+            stickyFilters
+            header={sourceBlock}
             searchTrailing={
               <Button
                 type="button"
@@ -262,8 +272,8 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
               </Button>
             }
           />
-        )}
-      </section>
+        </section>
+      )}
 
       {/* 3. Водитель */}
       {vehicle ? (

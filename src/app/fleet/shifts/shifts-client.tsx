@@ -240,6 +240,7 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
             <VehiclePicker
               vehicles={availableVehicles}
               disabled={pending}
+              stickyFilters
               noVehiclesText="Вся техника уже в перечне"
               onSelect={(v) => {
                 const driverId = driverFor(v.id);

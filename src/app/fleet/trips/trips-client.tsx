@@ -278,6 +278,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         vehicles={onLineVehicles}
         large
         sub="brand"
+        stickyFilters
         onSelect={(v) => recordTrip(v.id)}
         emptyText="Самосвалы не найдены"
         noVehiclesText="На линии пока нет машин — выведите их ниже."

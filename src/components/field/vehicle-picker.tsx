@@ -24,6 +24,10 @@ interface VehiclePickerProps {
   searchTrailing?: ReactNode;
   /** Элемент в правой части каждой плитки (например, ✕ для снятия). */
   tileTrailing?: ReactNode;
+  /** Закрепить фильтры (вкладки + поиск) под шапкой при листании длинного списка. */
+  stickyFilters?: boolean;
+  /** Блок над вкладками внутри закреплённой области (например, источник топлива). */
+  header?: ReactNode;
 }
 
 /**
@@ -40,6 +44,8 @@ export function VehiclePicker({
   noVehiclesText,
   searchTrailing,
   tileTrailing,
+  stickyFilters = false,
+  header,
 }: VehiclePickerProps) {
   const [type, setType] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -63,28 +69,37 @@ export function VehiclePicker({
 
   return (
     <div className="flex flex-col gap-2">
-      {types.length > 1 ? (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
-          <TypeChip label="Все" active={effType === "all"} onClick={() => setType("all")} />
-          {types.map((t) => (
-            <TypeChip
-              key={t}
-              label={VEHICLE_TYPE_LABELS_PLURAL[t]}
-              active={effType === t}
-              onClick={() => setType(t)}
-            />
-          ))}
-        </div>
-      ) : null}
+      <div
+        className={
+          stickyFilters
+            ? "sticky top-[var(--app-sticky-top)] z-20 flex flex-col gap-2 bg-background pb-2"
+            : "flex flex-col gap-2"
+        }
+      >
+        {header}
+        {types.length > 1 ? (
+          <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+            <TypeChip label="Все" active={effType === "all"} onClick={() => setType("all")} />
+            {types.map((t) => (
+              <TypeChip
+                key={t}
+                label={VEHICLE_TYPE_LABELS_PLURAL[t]}
+                active={effType === t}
+                onClick={() => setType(t)}
+              />
+            ))}
+          </div>
+        ) : null}
 
-      <div className="flex gap-2">
-        <Input
-          placeholder="Гос. номер или марка"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="h-12"
-        />
-        {searchTrailing}
+        <div className="flex gap-2">
+          <Input
+            placeholder="Гос. номер или марка"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-12"
+          />
+          {searchTrailing}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">

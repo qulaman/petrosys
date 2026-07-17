@@ -33,15 +33,62 @@ const CONTRACTORS = [
   { key: "sherniyaz", name: "ИП Магазин «Шернияз»", bin: "811016301374", head: "Шаймердинова Гульзиза Сейлхановна", vat: false },
   { key: "miras", name: "ИП Мирас", bin: "890918351831", head: "Кистаубаев Мирас Куанышевич", vat: true },
   { key: "tama", name: "ИП Тама", bin: "941209351118", head: "Төлеуғали Шернияз Алпамысұлы", vat: false },
-  { key: "beknur", name: "ИП Бекнұр", bin: null, head: "Қуанышбаева Гүлжан Бақытжанқызы", vat: false },
-  { key: "agaiyndylar", name: "ИП Ағайындылар", bin: null, head: "Утегулов Ертилес Ертаргынович", vat: true },
-  { key: "daniyarov", name: "ИП Данияров", bin: null, head: "Данияров Марат Саблибекович", vat: false },
-  { key: "kuzdibaev", name: "ИП Куздибаев", bin: null, head: "Куздибаев Руслан Жумабекович", vat: false },
-  { key: "batys", name: "ТОО «Batys Zholdari»", bin: null, head: "Қабылқай Дархан Бекетұлы", vat: true },
+  { key: "beknur", name: "ИП Бекнұр", bin: "940924450874", head: "Қуанышбаева Гүлжан Бақытжанқызы", vat: false },
+  { key: "agaiyndylar", name: "ИП Ағайындылар", bin: "890520351203", head: "Утегулов Ертилес Ертаргынович", vat: true },
+  { key: "daniyarov", name: "ИП Данияров", bin: "830905302148", head: "Данияров Марат Саблибекович", vat: false },
+  { key: "kuzdibaev", name: "ИП Куздибаев", bin: "780228303263", head: "Куздибаев Руслан Жумабекович", vat: false },
+  { key: "batys", name: "ТОО «Batys Zholdari»", bin: "260140016517", head: "Қабылқай Дархан Бекетұлы", vat: true },
   { key: "gorban", name: "ИП Горбань", bin: "730902300263", head: "Горбань Виктор Анатольевич", vat: false, bank: "АО «Kaspi Bank»", iik: "KZ73722C000044340938", bik: "CASPKZKA" },
   { key: "oryntai", name: "ТОО «Орынтай Б.Ж.»", bin: "941003351435", head: "Орынтай Бекболат Жақсыбекұлы", vat: true, bank: "АО «Банк ЦентрКредит»", iik: "KZ538562204114629319", bik: "KCJBKZKX" },
   { key: "kharchenko", name: "ИП Харченко А.В.", bin: "760703301423", head: "Харченко Алексей Валерьевич", vat: false, bank: "АО «Народный Банк Казахстана»", iik: "KZ626017121000013079", bik: "HSBKKZKX" },
-  { key: "aliturlyev", name: "ИП Алитурлиев Е.Т.", bin: null, head: "Алитурлиев Ерлан Тюлибаевич", vat: false },
+  { key: "aliturlyev", name: "ИП Алитурлиев Е.Т.", bin: "760517302926", head: "Алитурлиев Ерлан Тюлибаевич", vat: false },
+  // --- Этап A2: вторая партия (docs/Все договора), см. docs/contracts_registry_history.md ---
+  { key: "ermanov", name: "ИП Ерманов", bin: "900730351289", vat: false },
+  { key: "bereke", name: "ИП Береке", bin: "611020403446", vat: true },
+  { key: "lygin", name: "ИП Лыгин", bin: "800220301021", vat: false },
+  { key: "sparta", name: "ТОО SPARTA CONSTRUCTION", bin: "221140031229", vat: true },
+  { key: "atlas", name: "ТОО «Атлас Авто»", bin: "110640018195", vat: true },
+  { key: "sunqar", name: "ИП SUNQAR", bin: "021219551531", vat: false },
+  { key: "sanzhar", name: "ИП Санжар", bin: "890103451282", head: "Шортанбаева Д.С.", vat: false },
+  { key: "stamov", name: "ИП Стамов Р.Е.", bin: "821004301350", vat: false },
+  { key: "mts", name: "ТОО «MTS 1999»", bin: "990440006750", vat: true },
+  { key: "ermakhan", name: "ИП Ермахан", bin: "000709550975", head: "Нурбаулиев Ермахан Еркінұлы", vat: true },
+  { key: "stroymontazh", name: "ТОО «СтройМонтаж-Актобе»", bin: "190940003441", vat: true },
+  { key: "satoil", name: "ТОО «SAT-OIL LTD»", bin: "200640017989", vat: true },
+  { key: "sagynbaev", name: "ИП Сағынбаев", bin: "021021551494", vat: false },
+  { key: "nurkeldy", name: "ИП НҰРКЕЛДІ", bin: "980602351397", vat: false },
+  { key: "iztleuov", name: "ИП Изтлеуов Н.К.", bin: "641004302093", vat: false },
+  { key: "markabaev", name: "ИП «МАРКАБАЕВ»", bin: "860330302455", vat: true },
+  { key: "kadekkyzy", name: "ИП «Қадекқызы О»", bin: "860526403514", vat: true },
+  { key: "otemambetova", name: "ИП Өтемамбетова Л.О.", bin: "460608400715", vat: false },
+  { key: "zhantazina", name: "ИП «Жантазина»", bin: "810505402067", vat: false },
+  { key: "alikhan", name: "ИП «Алихан»", bin: "880711301075", vat: true },
+  { key: "sems", name: "ТОО СпецЭнергоМонтажСтрой", bin: "060440006569", vat: true },
+  // исторические (волны 1–2, все договоры истекли)
+  { key: "zere", name: "ИП Зере", bin: "840425300957", head: "Нурмуханов Берик Муханбетович", vat: true },
+  { key: "kabylkay", name: "ИП Қабылқай", bin: "940127350974", vat: false },
+  { key: "nazartrans", name: "ИП Назар Транс Уэст", bin: "840812400789", vat: true },
+  { key: "musirkepova", name: "ИП Мусиркепова", bin: "650321400670", vat: true },
+  { key: "mukhadinov", name: "ИП Мухадинов", bin: "951121350301", vat: true },
+  { key: "dzhumanazarov", name: "ИП Джуманазаров", bin: "890228303008", vat: true },
+  { key: "zhumaniyazov", name: "ИП Жуманиязов", bin: "870209302171", vat: false },
+  { key: "aidana", name: "ИП Айдана", bin: "920301401200", vat: false },
+  { key: "turegaliev", name: "ИП Турегалиев", bin: "950728300878", vat: false },
+  { key: "ergaliev", name: "ИП Ерғалиев", bin: "930424300940", vat: true },
+  { key: "global", name: "ТОО «Глобал Сервис ЛТД»", bin: "171240009859", vat: true },
+  { key: "tgr", name: "ТОО «T.G.R LTD»", bin: "051040007662", vat: true },
+  { key: "alash", name: "ТОО «Алаш аманаты 888»", bin: "050240016021", vat: true },
+  { key: "aistpost", name: "ИП «AISTPOST»", bin: "960308301011", vat: true },
+  { key: "nurservice", name: "ТОО «НУР-СервисТранс»", bin: "241040031070", vat: true },
+  { key: "kamanov", name: "ИП Каманов А.А.", bin: "930325301118", vat: true },
+];
+
+// Операторы техники из приложений ПУСТ (закреплены за машинами контрагента).
+const OPERATORS = [
+  { name: "Тургумбаев Серик", contractor: "mts" },
+  { name: "Червинский А.С.", contractor: "sagynbaev" },
+  { name: "Нұралы Н.Н.", contractor: "iztleuov" },
+  { name: "Тулегенов М.Ж.", contractor: "nurkeldy" },
 ];
 
 // prices: { unit, price, from, type?, reg?, note? } — type по умолчанию dump_truck.
@@ -59,11 +106,20 @@ const CONTRACTS = [
     prices: [{ unit: "trip", price: 10344.83, from: "2026-05-13" }],
     fuel: [{ price: 282, from: "2026-05-13" }] },
   { key: "daniyarov", contractor: "daniyarov", number: "27/03-13-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-07-30", active: true,
-    prices: [{ unit: "trip", price: 10344.83, from: "2026-04-30", note: "допсоглашение №01 от 30.04" }, { unit: "hour", price: 10344.83, from: "2026-04-30", note: "допсоглашение №01" }],
-    fuel: [{ price: 282, from: "2026-04-30" }] },
+    prices: [
+      { unit: "trip", price: 20900, from: "2026-03-27", note: "базовая ставка волны 27/03" },
+      { unit: "trip", price: 10344.83, from: "2026-04-30", note: "допсоглашение №01 от 30.04" },
+      { unit: "hour", price: 10344.83, from: "2026-04-30", note: "допсоглашение №01" },
+    ],
+    fuel: [{ price: 327, from: "2026-03-27" }, { price: 282, from: "2026-04-30" }] },
   { key: "kuzdibaev", contractor: "kuzdibaev", number: "27/03-03-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-07-30", active: true,
-    prices: [{ unit: "trip", price: 10344.83, from: "2026-04-30", note: "допсоглашение №01 от 30.04" }, { unit: "hour", price: 10344.83, from: "2026-04-30", note: "допсоглашение №01" }],
-    fuel: [{ price: 282, from: "2026-04-30" }] },
+    prices: [
+      { unit: "trip", price: 20900, from: "2026-03-27", note: "базовая ставка волны 27/03" },
+      { unit: "trip", price: 24824, from: "2026-04-15", note: "повышенная до подсыхания дороги" },
+      { unit: "trip", price: 10344.83, from: "2026-04-30", note: "допсоглашение №01 от 30.04" },
+      { unit: "hour", price: 10344.83, from: "2026-04-30", note: "допсоглашение №01" },
+    ],
+    fuel: [{ price: 327, from: "2026-03-27" }, { price: 282, from: "2026-04-30" }] },
   { key: "nazar", contractor: "nazar", number: "18/05-02-УОП-2026", type: "transportation", from: "2026-05-18", to: "2026-06-30", active: false,
     prices: [{ unit: "trip", price: 12000, from: "2026-05-18" }, { unit: "hour", price: 12000, from: "2026-05-18" }],
     fuel: [{ price: 328, from: "2026-05-18" }] },
@@ -104,11 +160,19 @@ const CONTRACTS = [
     ],
     fuel: [{ price: 328, from: "2026-04-15" }, { price: 282, from: "2026-04-30", note: "допсоглашение №02" }] },
   { key: "agaiyndylar", contractor: "agaiyndylar", number: "27/03-14-УОП-2026", type: "transportation", from: "2026-04-10", to: "2026-06-30", active: false,
-    prices: [{ unit: "trip", price: 12000, from: "2026-04-30", note: "допсоглашение №01 от 30.04" }],
-    fuel: [{ price: 328, from: "2026-04-30" }] },
+    prices: [
+      { unit: "trip", price: 20900, from: "2026-04-10", note: "базовая ставка" },
+      { unit: "trip", price: 24824, from: "2026-04-15", note: "повышенная до подсыхания дороги" },
+      { unit: "trip", price: 12000, from: "2026-04-30", note: "допсоглашение №01 от 30.04" },
+    ],
+    fuel: [{ price: 327, from: "2026-04-10" }, { price: 328, from: "2026-04-30" }] },
   { key: "batys", contractor: "batys", number: "27/03-01-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-06-30", active: false,
-    prices: [{ unit: "trip", price: 12000, from: "2026-04-30", note: "допсоглашение №01" }],
-    fuel: [{ price: 328, from: "2026-04-30" }] },
+    prices: [
+      { unit: "trip", price: 20900, from: "2026-03-27", note: "базовая ставка" },
+      { unit: "trip", price: 24824, from: "2026-04-15", note: "повышенная до подсыхания дороги" },
+      { unit: "trip", price: 12000, from: "2026-04-30", note: "допсоглашение №01" },
+    ],
+    fuel: [{ price: 327, from: "2026-03-27" }, { price: 328, from: "2026-04-30" }] },
   { key: "gorban", contractor: "gorban", number: "17/06-01-ПУСТ-2026", type: "equipment", from: "2026-06-17", to: "2026-08-30", active: true,
     prices: [{ unit: "hour", price: 8000, from: "2026-06-17", type: "water_truck", reg: "263 ANL" }],
     fuel: [{ price: 291, from: "2026-06-17" }] },
@@ -121,9 +185,139 @@ const CONTRACTS = [
   { key: "kharchenko", contractor: "kharchenko", number: "18/05-01-ПУСТ-2026", type: "equipment", from: "2026-05-18", to: "2026-08-30", active: true,
     prices: [{ unit: "hour", price: 12100, from: "2026-05-18", type: "loader", reg: "852 AOD" }],
     fuel: [{ price: 282, from: "2026-05-18" }] },
-  { key: "aliturlyev", contractor: "aliturlyev", number: "04/05-01-ПУСТ-2026", type: "equipment", from: "2026-05-04", to: null, active: true,
-    prices: [{ unit: "hour", price: 15700, from: "2026-06-19", type: "grader", note: "допсоглашение №01 от 19.06; базовый договор отсутствует" }],
+  { key: "aliturlyev", contractor: "aliturlyev", number: "04/05-01-ПУСТ-2026", type: "equipment", from: "2026-05-04", to: "2026-08-30", active: true,
+    prices: [
+      { unit: "hour", price: 14700, from: "2026-05-04", type: "grader", note: "базовая ставка; госномер в приложении не указан" },
+      { unit: "hour", price: 12000, from: "2026-05-04", type: "loader", note: "госномер в приложении не указан" },
+      { unit: "hour", price: 15700, from: "2026-06-19", type: "grader", note: "допсоглашение №01 от 19.06" },
+    ],
+    fuel: [{ price: 282, from: "2026-05-04" }] },
+  // ------------------------- Этап A2: действующие -------------------------
+  { key: "ermanov-per", contractor: "ermanov", number: "11/06-01-УОП-2026", type: "transportation", from: "2026-06-11", to: "2026-07-30", active: true,
+    prices: [{ unit: "trip", price: 12069, from: "2026-06-11", note: "ставка по допсоглашению (дата в документе не указана); базовая 10344,83" }],
+    fuel: [{ price: 291, from: "2026-06-11", note: "допсоглашение; базовая 282" }] },
+  { key: "bereke", contractor: "bereke", number: "15/06-01-УОП-2026", type: "transportation", from: "2026-06-15", to: "2026-07-30", active: true,
+    prices: [{ unit: "trip", price: 12000, from: "2026-06-15" }, { unit: "hour", price: 12000, from: "2026-06-15" }],
+    fuel: [{ price: 328, from: "2026-06-15" }] },
+  { key: "lygin", contractor: "lygin", number: "16/07-02-УОП-2026", type: "transportation", from: "2026-07-16", to: "2026-08-30", active: true,
+    prices: [{ unit: "trip", price: 12069, from: "2026-07-16" }, { unit: "hour", price: 10345, from: "2026-07-16" }],
+    fuel: [{ price: 291, from: "2026-07-16" }] },
+  { key: "sparta", contractor: "sparta", number: "16/07-03-УОП-2026", type: "transportation", from: "2026-07-16", to: "2026-08-30", active: true,
+    prices: [{ unit: "trip", price: 14000, from: "2026-07-16" }, { unit: "hour", price: 12000, from: "2026-07-16" }],
+    fuel: [{ price: 337, from: "2026-07-16" }] },
+  { key: "atlas", contractor: "atlas", number: "16/07-01-УОП-2026", type: "transportation", from: "2026-07-16", to: "2026-08-30", active: true,
+    prices: [{ unit: "trip", price: 14000, from: "2026-07-16" }, { unit: "hour", price: 12000, from: "2026-07-16" }],
+    fuel: [{ price: 337, from: "2026-07-16" }] },
+  { key: "sunqar-new", contractor: "sunqar", number: "30/04-03-ПУСТ-2026", type: "equipment", from: "2026-04-30", to: "2026-08-30", active: true,
+    prices: [
+      { unit: "hour", price: 13000, from: "2026-04-30", type: "loader", reg: "087 AKD" },
+      { unit: "hour", price: 13000, from: "2026-04-30", type: "loader", reg: "304 ALD" },
+      { unit: "hour", price: 13000, from: "2026-04-30", type: "loader", reg: "902 AOD" },
+      { unit: "hour", price: 13000, from: "2026-04-30", type: "loader", reg: "296 AMD" },
+    ],
+    fuel: [{ price: 282, from: "2026-04-30" }] },
+  { key: "beknur-pust", contractor: "beknur", number: "16/05-02-ПУСТ-2026", type: "equipment", from: "2026-05-16", to: "2026-08-30", active: true,
+    prices: [
+      { unit: "hour", price: 12100, from: "2026-05-16", type: "loader", reg: "222 APD" },
+      { unit: "hour", price: 12100, from: "2026-05-16", type: "loader", reg: "029 AOD" },
+    ],
+    fuel: [{ price: 282, from: "2026-05-16" }] },
+  { key: "mts", contractor: "mts", number: "07/07-01-ПУСТ-2026", type: "equipment", from: "2026-07-07", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 20000, from: "2026-07-07", type: "excavator", reg: "252 ALD" }],
+    fuel: [{ price: 328, from: "2026-07-07" }] },
+  { key: "ermanov-pust", contractor: "ermanov", number: "22/06-01-ПУСТ-2026", type: "equipment", from: "2026-06-22", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 17240, from: "2026-06-22", type: "excavator", reg: "965 AFD" }],
+    fuel: [{ price: 282, from: "2026-06-22" }] },
+  { key: "ermakhan", contractor: "ermakhan", number: "13/07-01-ПУСТ-2026", type: "equipment", from: "2026-07-13", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 20000, from: "2026-07-13", type: "grader", reg: "595 AKD", note: "договор-драфт (поля «уточнить»)" }],
     fuel: [] },
+  { key: "stroymontazh", contractor: "stroymontazh", number: "27/06-01-ПУСТ-2026", type: "equipment", from: "2026-06-27", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 18000, from: "2026-06-27", type: "grader", reg: "597 AND" }],
+    fuel: [{ price: 328, from: "2026-06-27" }] },
+  { key: "satoil", contractor: "satoil", number: "13/05-01-ПУСТ-2026", type: "equipment", from: "2026-05-13", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 14000, from: "2026-05-13", type: "roller", reg: "373 ALD", note: "в договоре противоречие с/без НДС" }],
+    fuel: [{ price: 328, from: "2026-05-13" }] },
+  { key: "sagynbaev", contractor: "sagynbaev", number: "30/04-03-ПУСТ-2026", type: "equipment", from: "2026-04-30", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 12100, from: "2026-04-30", type: "roller", reg: "812 ALD" }],
+    fuel: [{ price: 282, from: "2026-04-30" }] },
+  { key: "nurkeldy", contractor: "nurkeldy", number: "14/05-01-ПУСТ-2026", type: "equipment", from: "2026-05-14", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 8000, from: "2026-05-14", type: "water_truck", reg: "819 AJL" }],
+    fuel: [{ price: 282, from: "2026-05-14" }] },
+  { key: "iztleuov", contractor: "iztleuov", number: "18/05-02-ПУСТ-2026", type: "equipment", from: "2026-05-18", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 6000, from: "2026-05-18", type: "water_truck", reg: "660 NUR" }],
+    fuel: [{ price: 282, from: "2026-05-18" }] },
+  { key: "markabaev", contractor: "markabaev", number: "19/05-01-ПУСТ-2026", type: "equipment", from: "2026-05-19", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 17000, from: "2026-05-19", type: "dozer", note: "госномер в приложении не указан" }],
+    fuel: [{ price: 328, from: "2026-05-19" }] },
+  { key: "kadekkyzy", contractor: "kadekkyzy", number: "04/05-02-ПУСТ-2026", type: "equipment", from: "2026-05-04", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 17000, from: "2026-05-04", type: "dozer", note: "госномер в приложении не указан" }],
+    fuel: [{ price: 328, from: "2026-05-04" }] },
+  { key: "otemambetova", contractor: "otemambetova", number: "26/05-01-ПУСТ-2026", type: "equipment", from: "2026-05-26", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 14700, from: "2026-05-26", type: "grader", note: "госномер в приложении не указан" }],
+    fuel: [{ price: 282, from: "2026-05-26" }] },
+  { key: "zhantazina", contractor: "zhantazina", number: "30/04-02-ПУСТ-2026", type: "equipment", from: "2026-04-30", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 12100, from: "2026-04-30", type: "roller", note: "госномер в приложении не указан" }],
+    fuel: [{ price: 282, from: "2026-04-30" }] },
+  { key: "alikhan", contractor: "alikhan", number: "30/04-01-ПУСТ-2026", type: "equipment", from: "2026-04-30", to: "2026-08-30", active: true,
+    prices: [],
+    fuel: [{ price: 328, from: "2026-04-30" }] },
+  { key: "sems", contractor: "sems", number: "30/04-01-ПУСТ-2026", type: "equipment", from: "2026-04-30", to: "2026-08-30", active: true,
+    prices: [{ unit: "hour", price: 18000, from: "2026-04-30", type: "grader", note: "госномер в приложении не указан" }],
+    fuel: [{ price: 328, from: "2026-04-30" }] },
+  // посменные — договоры заведены, прайс отложен до решения по единице «смена»
+  { key: "sanzhar-pust", contractor: "sanzhar", number: "20/05-01-ПУСТ-2026", type: "equipment", from: "2026-05-20", to: "2026-07-30", active: true,
+    prices: [], fuel: [] },
+  { key: "stamov-rent", contractor: "stamov", number: "02/03-2026-ДА", type: "equipment", from: "2026-03-02", to: "2026-07-30", active: true,
+    prices: [], fuel: [] },
+  // ------------------------- Этап A2: история (истёкшие) -------------------------
+  { key: "sunqar-old", contractor: "sunqar", number: "06/04-01-ПУСТ-2026", type: "equipment", from: "2026-04-06", to: "2026-04-30", active: false, prices: [], fuel: [] },
+  { key: "zere-feb", contractor: "zere", number: "01-02/26", type: "transportation", from: "2026-02-14", to: null, active: false, prices: [], fuel: [] },
+  { key: "kabylkay-feb", contractor: "kabylkay", number: "03-02/26", type: "transportation", from: "2026-02-14", to: null, active: false, prices: [], fuel: [] },
+  { key: "musirkepova-feb", contractor: "musirkepova", number: "04-02/26", type: "transportation", from: "2026-02-14", to: null, active: false, prices: [], fuel: [] },
+  { key: "nazartrans-feb", contractor: "nazartrans", number: "04-02/26", type: "transportation", from: "2026-02-16", to: null, active: false, prices: [], fuel: [] },
+  { key: "kuzdibaev-feb", contractor: "kuzdibaev", number: "05-02/26", type: "transportation", from: "2026-02-16", to: null, active: false, prices: [], fuel: [] },
+  { key: "batys-feb", contractor: "batys", number: "06-02/26", type: "transportation", from: "2026-02-17", to: null, active: false, prices: [], fuel: [] },
+  { key: "mukhadinov-feb", contractor: "mukhadinov", number: "07-02/26", type: "transportation", from: "2026-02-20", to: null, active: false, prices: [], fuel: [] },
+  { key: "daniyarov-feb", contractor: "daniyarov", number: "25-02/26", type: "transportation", from: "2026-02-25", to: null, active: false, prices: [], fuel: [] },
+  { key: "dzhumanazarov-feb", contractor: "dzhumanazarov", number: "27-02/26", type: "transportation", from: "2026-02-27", to: null, active: false, prices: [], fuel: [] },
+  { key: "zhumaniyazov-feb", contractor: "zhumaniyazov", number: "27-02/26-1", type: "transportation", from: "2026-02-27", to: null, active: false, prices: [], fuel: [] },
+  { key: "dabylkhanov-feb", contractor: "dabylkhanov", number: "02-03/26-1", type: "transportation", from: "2026-03-02", to: null, active: false, prices: [], fuel: [] },
+  { key: "global-feb", contractor: "global", number: "05-03/26", type: "transportation", from: "2026-03-05", to: null, active: false, prices: [], fuel: [] },
+  { key: "zere-rent", contractor: "zere", number: "14/02-2026/1-ДАТС", type: "equipment", from: "2026-02-14", to: "2026-03-31", active: false, prices: [], fuel: [] },
+  { key: "kabylkay-rent", contractor: "kabylkay", number: "26/02-2026-ДАТС", type: "equipment", from: "2026-02-26", to: "2026-03-31", active: false, prices: [], fuel: [] },
+  { key: "nazartrans-rent", contractor: "nazartrans", number: "14/02-2026/3-ДАТС", type: "equipment", from: "2026-02-14", to: "2026-03-31", active: false, prices: [], fuel: [] },
+  { key: "sanzhar-rent", contractor: "sanzhar", number: "18/02-2026/1-ДАТС", type: "equipment", from: "2026-02-18", to: "2026-03-31", active: false, prices: [], fuel: [] },
+  { key: "batys-rent", contractor: "batys", number: "17/02-2026/2-ДАТС", type: "equipment", from: "2026-02-17", to: "2026-03-31", active: false, prices: [], fuel: [] },
+  { key: "kamanov-rent", contractor: "kamanov", number: "14/02-26-ДА", type: "equipment", from: "2026-02-14", to: "2026-04-30", active: false, prices: [], fuel: [] },
+  { key: "zere-uop", contractor: "zere", number: "27/03-02-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-03-27" }], fuel: [{ price: 327, from: "2026-03-27" }] },
+  { key: "musirkepova-uop", contractor: "musirkepova", number: "27/03-04-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-03-27" }], fuel: [{ price: 327, from: "2026-03-27" }] },
+  { key: "global-uop", contractor: "global", number: "27/03-05-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-03-27" }], fuel: [{ price: 327, from: "2026-03-27" }] },
+  { key: "nazartrans-uop", contractor: "nazartrans", number: "27/03-06-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-03-27" }], fuel: [{ price: 327, from: "2026-03-27" }] },
+  { key: "ergaliev-uop", contractor: "ergaliev", number: "27/03-07-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-03-27" }], fuel: [{ price: 327, from: "2026-03-27" }] },
+  { key: "mukhadinov-uop", contractor: "mukhadinov", number: "27/03-08-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-03-27" }], fuel: [{ price: 327, from: "2026-03-27" }] },
+  { key: "turegaliev-uop", contractor: "turegaliev", number: "27/03-09-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 17319, from: "2026-03-27" }], fuel: [{ price: 282, from: "2026-03-27" }] },
+  { key: "aidana-uop", contractor: "aidana", number: "27/03-12-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 17556, from: "2026-03-27" }], fuel: [] },
+  { key: "zhumaniyazov-uop", contractor: "zhumaniyazov", number: "27/03-12-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 17556, from: "2026-03-27", note: "дубль номера с ИП Айдана — как в документах" }], fuel: [] },
+  { key: "tgr-uop", contractor: "tgr", number: "27/03-13-УОП-2026", type: "transportation", from: "2026-03-27", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-03-27", note: "дубль номера с ИП Данияров — как в документах" }], fuel: [{ price: 327, from: "2026-03-27" }] },
+  { key: "alash-uop", contractor: "alash", number: "16/04-01-УОП-2026", type: "transportation", from: "2026-04-16", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-04-16" }, { unit: "trip", price: 24824, from: "2026-04-16", note: "повышенная до подсыхания дороги" }],
+    fuel: [{ price: 327, from: "2026-04-16" }] },
+  { key: "aistpost-uop", contractor: "aistpost", number: "16/04-02-УОП-2026", type: "transportation", from: "2026-04-16", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 20900, from: "2026-04-16" }], fuel: [{ price: 327, from: "2026-04-16" }] },
+  { key: "nurservice-uop", contractor: "nurservice", number: "18/04-01-УОП-2026", type: "transportation", from: "2026-04-18", to: "2026-04-30", active: false,
+    prices: [{ unit: "trip", price: 30800, from: "2026-04-18", note: "в тексте также 20900 — уточнить" }], fuel: [{ price: 327, from: "2026-04-18" }] },
+  { key: "kabylkay-pust", contractor: "kabylkay", number: "27/03-03-ПУСТ-2026", type: "equipment", from: "2026-03-27", to: "2026-04-30", active: false, prices: [], fuel: [] },
+  { key: "nazartrans-pust", contractor: "nazartrans", number: "27/03-02-ПУСТ-2026", type: "equipment", from: "2026-03-27", to: "2026-04-30", active: false, prices: [], fuel: [] },
 ];
 
 // Приложения №2: машина → договор (+марка из договора). Только действующие
@@ -149,6 +343,31 @@ const VEHICLE_ASSIGN = [
   { reg: "413 AOD", brand: "Т-170", contract: "oryntai", type: "dozer" },
   { reg: "412 AOD", brand: "Т-170", contract: "oryntai", type: "dozer" },
   { reg: "852 AOD", brand: null, contract: "kharchenko", type: "loader" },
+  // --- Этап A2 ---
+  { reg: "087 AKD", brand: null, contract: "sunqar-new", type: "loader" },
+  { reg: "304 ALD", brand: null, contract: "sunqar-new", type: "loader" },
+  { reg: "902 AOD", brand: null, contract: "sunqar-new", type: "loader" },
+  { reg: "296 AMD", brand: null, contract: "sunqar-new", type: "loader" },
+  { reg: "222 APD", brand: "ZL50GN", contract: "beknur-pust", type: "loader" },
+  { reg: "029 AOD", brand: "ZL50GN", contract: "beknur-pust", type: "loader" },
+  { reg: "252 ALD", brand: "HITACHI ZX-300", contract: "mts", type: "excavator" },
+  { reg: "965 AFD", brand: "VOLVO", contract: "ermanov-pust", type: "excavator" },
+  { reg: "595 AKD", brand: "Liugong", contract: "ermakhan", type: "grader" },
+  { reg: "597 AND", brand: "SANY", contract: "stroymontazh", type: "grader" },
+  { reg: "373 ALD", brand: "XCMG XS202J", contract: "satoil", type: "roller" },
+  { reg: "812 ALD", brand: "CHANGLIN", contract: "sagynbaev", type: "roller" },
+  { reg: "819 AJL", brand: "Камаз", contract: "nurkeldy", type: "water_truck" },
+  { reg: "660 NUR", brand: "Камаз", contract: "iztleuov", type: "water_truck" },
+  { reg: "695 AWD", brand: null, contract: "sanzhar-pust", type: "excavator" },
+  { reg: "696 AWD", brand: null, contract: "sanzhar-pust", type: "loader" },
+  { reg: "563 GK", brand: "Хова", contract: "ermanov-per", type: "dump_truck" },
+  { reg: "353 AHC", brand: null, contract: "bereke", type: "dump_truck" },
+  { reg: "830 AJF", brand: null, contract: "lygin", type: "dump_truck" },
+  { reg: "985 BD", brand: null, contract: "sparta", type: "dump_truck" },
+  { reg: "249 BE", brand: null, contract: "sparta", type: "dump_truck" },
+  { reg: "249 BA", brand: null, contract: "sparta", type: "dump_truck" },
+  ...["408 BE", "471 BE", "472 BE", "473 BE", "475 BE", "478 BE", "479 BE", "481 BE", "482 BE", "483 BE", "485 BE", "486 BE", "487 BE", "489 BE"]
+    .map((reg) => ({ reg, brand: null, contract: "atlas", type: "dump_truck" })),
 ];
 
 // В БД номера 798 GH / 796 GH (из листа «Рейсы»), в договоре УГ — 798 BH / 796 BH
@@ -235,7 +454,17 @@ async function main() {
   check(cErr, "contractors select");
   const contractorId = new Map(exContractors.map((c) => [c.name, c.id]));
   for (const c of CONTRACTORS) {
-    if (contractorId.has(c.name)) continue;
+    if (contractorId.has(c.name)) {
+      // дозаполняем реквизиты у существующих (ИИН из второй партии документов)
+      const upd = {};
+      if (c.bin) upd.bin = c.bin;
+      if (c.head) upd.head_name = c.head;
+      if (Object.keys(upd).length) {
+        const { error } = await db.from("contractors").update(upd).eq("id", contractorId.get(c.name));
+        check(error, `contractor update ${c.name}`);
+      }
+      continue;
+    }
     const { data, error } = await db.from("contractors").insert({
       org_id: ORG_ID, counterparty_type: "subcontractor", name: c.name, bin: c.bin,
       head_name: c.head, vat_payer: c.vat, bank_name: c.bank ?? null, iik: c.iik ?? null, bik: c.bik ?? null,
@@ -248,12 +477,13 @@ async function main() {
   console.log(`Контрагенты: всего ${contractorId.size}.`);
 
   // --- Договоры (upsert по номеру) + прайсы/ГСМ (перезапись) ---
-  const { data: exContracts, error: ctErr } = await db.from("contracts").select("id, number").eq("org_id", ORG_ID);
+  const { data: exContracts, error: ctErr } = await db.from("contracts").select("id, number, contractor_id").eq("org_id", ORG_ID);
   check(ctErr, "contracts select");
-  const contractIdByNumber = new Map(exContracts.map((c) => [c.number, c.id]));
+  // номера договоров в документах дублируются — ключ по номеру И контрагенту
+  const contractIdByNumber = new Map(exContracts.map((c) => [`${c.number}|${c.contractor_id}`, c.id]));
   const contractIdByKey = new Map();
   for (const c of CONTRACTS) {
-    let id = contractIdByNumber.get(c.number);
+    let id = contractIdByNumber.get(`${c.number}|${byKey.get(c.contractor)}`);
     if (!id) {
       const { data, error } = await db.from("contracts").insert({
         org_id: ORG_ID, contractor_id: byKey.get(c.contractor), number: c.number,
@@ -348,6 +578,24 @@ async function main() {
     driverIdByReg.set(canonReg(m.reg), id);
   }
   console.log(`Водители Тұрнияза: ${driverMatches.length} (обновлено ${driverMatches.filter((m) => m.existing && !m.ambiguous).length}).`);
+
+  // Операторы техники из приложений ПУСТ (создаём, если фамилия ещё не встречалась)
+  let opsAdded = 0;
+  for (const op of OPERATORS) {
+    const key = surnameKey(op.name);
+    const hit = drivers.find((d) => surnameKey(d.full_name) === key);
+    if (hit) {
+      const { error } = await db.from("drivers").update({ contractor_id: byKey.get(op.contractor) }).eq("id", hit.id);
+      check(error, `operator update ${op.name}`);
+    } else {
+      const { error } = await db.from("drivers").insert({
+        org_id: ORG_ID, full_name: op.name, contractor_id: byKey.get(op.contractor), is_active: true,
+      });
+      check(error, `operator insert ${op.name}`);
+      opsAdded++;
+    }
+  }
+  console.log(`Операторы ПУСТ: +${opsAdded} новых из ${OPERATORS.length}.`);
 
   // --- Дозагрузка: 2 рейса 664 AKX за 12.07 (лист «Рейсы» r127, ранее пропущено) ---
   const v664 = vehByCanon.get("664AKX");

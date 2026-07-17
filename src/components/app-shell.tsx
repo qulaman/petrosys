@@ -54,26 +54,34 @@ export async function AppShell({
     ({ href, label, icon }) => ({ href, label, icon }),
   );
 
-  return (
-    <div className="flex min-h-full flex-1 flex-col">
-      <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <Logo compact={!isOffice} />
-          <span className="hidden truncate text-xs text-muted-foreground sm:inline">
-            {current.profile.full_name ?? current.email} · {roleLabels}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <ThemeToggle />
-          <form action={signOut}>
-            <Button variant="ghost" size="sm" type="submit">
-              {ru.common.signOut}
-            </Button>
-          </form>
-        </div>
-      </header>
+  const showTopNav = isOffice && navItems.length > 1;
 
-      {isOffice && navItems.length > 1 ? <NavBar items={navItems} variant="top" /> : null}
+  return (
+    <div
+      className="flex min-h-full flex-1 flex-col"
+      // Суммарная высота закреплённой шапки — от неё отталкиваются нижние sticky-уровни.
+      style={{ "--app-sticky-top": showTopNav ? "100px" : "56px" } as React.CSSProperties}
+    >
+      <div className="sticky top-0 z-40 bg-background">
+        <header className="flex h-14 items-center justify-between gap-3 border-b px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <Logo compact={!isOffice} />
+            <span className="hidden truncate text-xs text-muted-foreground sm:inline">
+              {current.profile.full_name ?? current.email} · {roleLabels}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <form action={signOut}>
+              <Button variant="ghost" size="sm" type="submit">
+                {ru.common.signOut}
+              </Button>
+            </form>
+          </div>
+        </header>
+
+        {showTopNav ? <NavBar items={navItems} variant="top" /> : null}
+      </div>
 
       <main className={cn("flex-1 p-4", !isOffice ? "pb-24" : "")}>
         <h1 className="mb-4 text-xl font-semibold">{title}</h1>

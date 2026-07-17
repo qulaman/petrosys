@@ -30,7 +30,7 @@ export function DashboardNav({
   newAnomalies: number;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+    <div className="sticky top-[var(--app-sticky-top)] z-30 flex flex-wrap items-center gap-2 border-b bg-background pb-2 pt-1">
       {TABS.map((t) => (
         <Link
           key={t.key}

@@ -73,7 +73,7 @@ export function NavBar({ items, variant }: { items: NavItem[]; variant: "top" | 
   }
 
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b px-2 py-1.5">
+    <nav className="flex h-11 items-center gap-1 overflow-x-auto border-b px-2">
       {items.map((n) => (
         <Link
           key={n.href}
