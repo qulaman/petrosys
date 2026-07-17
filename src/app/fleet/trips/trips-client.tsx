@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { QrScanner } from "@/components/field/qr-scanner";
 import { SignaturePad } from "@/components/field/signature-pad";
+import { VehiclePicker } from "@/components/field/vehicle-picker";
 import { useOutbox } from "@/lib/outbox/use-outbox";
 import { uploadSignature } from "@/lib/storage/upload";
 import { fmtTime } from "@/lib/format";
@@ -49,10 +50,8 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const [routeId, setRouteId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : localStorage.getItem(ROUTE_KEY),
   );
-  const [search, setSearch] = useState("");
   const [showQr, setShowQr] = useState(false);
   const [manageOpen, setManageOpen] = useState(false);
-  const [manageSearch, setManageSearch] = useState("");
   const [pendingSig, setPendingSig] = useState<{ vehicle_id: string; driver_id: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -72,14 +71,6 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const onLineSet = useMemo(() => new Set(lineupVehicleIds), [lineupVehicleIds]);
   const onLineVehicles = vehicles.filter((v) => onLineSet.has(v.id));
   const offLineVehicles = vehicles.filter((v) => !onLineSet.has(v.id));
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return onLineVehicles;
-    return onLineVehicles.filter(
-      (v) => v.reg_number.toLowerCase().includes(q) || v.brand.toLowerCase().includes(q),
-    );
-  }, [onLineVehicles, search]);
 
   function setParams(date: string, shift: string) {
     router.push(`${pathname}?date=${date}&shift=${shift}`);
@@ -253,12 +244,6 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   // Этап 2 — фиксация рейсов по машинам на линии
   // ---------------------------------------------------------------------------
   const hasUnsent = pendingCount > 0;
-  const manageQuery = manageSearch.trim().toLowerCase();
-  const manageMatch = (v: { reg_number: string; brand: string }) =>
-    manageQuery === "" ||
-    v.reg_number.toLowerCase().includes(manageQuery) ||
-    v.brand.toLowerCase().includes(manageQuery);
-
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-4 pb-6">
       <ShiftPicker date={data.date} shift={data.shift} onChange={setParams} />
@@ -287,33 +272,14 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         <ScanLine className="size-7" /> Сканировать QR
       </Button>
 
-      <Input
-        placeholder="Гос. номер или марка"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="h-12"
+      <VehiclePicker
+        vehicles={onLineVehicles}
+        large
+        sub="brand"
+        onSelect={(v) => recordTrip(v.id)}
+        emptyText="Самосвалы не найдены"
+        noVehiclesText="На линии пока нет машин — выведите их ниже."
       />
-
-      <div className="grid grid-cols-2 gap-2">
-        {filtered.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            onClick={() => recordTrip(v.id)}
-            className="flex min-h-20 flex-col items-center justify-center rounded-lg border p-3 text-center active:bg-accent"
-          >
-            <span className="text-2xl font-bold tracking-tight">{v.reg_number}</span>
-            <span className="text-xs text-muted-foreground">{v.brand}</span>
-          </button>
-        ))}
-        {filtered.length === 0 ? (
-          <p className="col-span-2 text-sm text-muted-foreground">
-            {onLineVehicles.length === 0
-              ? "На линии пока нет машин — выведите их ниже."
-              : "Самосвалы не найдены"}
-          </p>
-        ) : null}
-      </div>
 
       {/* Управление линией: вывести/снять машину в течение смены */}
       <div className="flex flex-col gap-2">
@@ -322,58 +288,31 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         </Button>
         {manageOpen ? (
           <div className="flex flex-col gap-3 rounded-lg border p-3">
-            <Input
-              placeholder="Поиск: гос. номер или марка"
-              value={manageSearch}
-              onChange={(e) => setManageSearch(e.target.value)}
-              className="h-11"
-            />
-
             <div className="flex flex-col gap-1.5">
               <Label>Не на линии — нажмите, чтобы вывести</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {offLineVehicles.filter(manageMatch).map((v) => (
-                  <button
-                    key={v.id}
-                    disabled={pending}
-                    onClick={() =>
-                      act(() => addLineupVehicle({ lineup_id: lineup.id, vehicle_id: v.id }), `${v.reg_number} на линии`)
-                    }
-                    className="flex min-h-14 flex-col items-start justify-center rounded-lg border p-2.5 text-left active:bg-accent"
-                  >
-                    <span className="font-bold tracking-tight">{v.reg_number}</span>
-                    <span className="text-xs text-muted-foreground">{v.brand}</span>
-                  </button>
-                ))}
-                {offLineVehicles.filter(manageMatch).length === 0 ? (
-                  <p className="col-span-2 text-sm text-muted-foreground">Все самосвалы уже на линии</p>
-                ) : null}
-              </div>
+              <VehiclePicker
+                vehicles={offLineVehicles}
+                sub="brand"
+                disabled={pending}
+                noVehiclesText="Все самосвалы уже на линии"
+                onSelect={(v) =>
+                  act(() => addLineupVehicle({ lineup_id: lineup.id, vehicle_id: v.id }), `${v.reg_number} на линии`)
+                }
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <Label>На линии — нажмите, чтобы снять (пока нет рейсов)</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {onLineVehicles.filter(manageMatch).map((v) => (
-                  <button
-                    key={v.id}
-                    disabled={pending}
-                    onClick={() =>
-                      act(() => removeLineupVehicle({ lineup_id: lineup.id, vehicle_id: v.id }), `${v.reg_number} снята с линии`)
-                    }
-                    className="flex min-h-14 items-center justify-between rounded-lg border p-2.5 text-left active:bg-accent"
-                  >
-                    <span>
-                      <span className="block font-bold tracking-tight">{v.reg_number}</span>
-                      <span className="block text-xs text-muted-foreground">{v.brand}</span>
-                    </span>
-                    <X className="size-4 text-destructive" />
-                  </button>
-                ))}
-                {onLineVehicles.filter(manageMatch).length === 0 ? (
-                  <p className="col-span-2 text-sm text-muted-foreground">На линии нет машин</p>
-                ) : null}
-              </div>
+              <VehiclePicker
+                vehicles={onLineVehicles}
+                sub="brand"
+                disabled={pending}
+                noVehiclesText="На линии нет машин"
+                tileTrailing={<X className="size-4 shrink-0 text-destructive" />}
+                onSelect={(v) =>
+                  act(() => removeLineupVehicle({ lineup_id: lineup.id, vehicle_id: v.id }), `${v.reg_number} снята с линии`)
+                }
+              />
             </div>
           </div>
         ) : null}

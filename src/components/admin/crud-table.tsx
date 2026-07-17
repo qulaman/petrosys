@@ -13,6 +13,8 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import { SearchSelect, type SearchSelectOption } from "@/components/ui/search-select";
+import { VEHICLE_TYPE_LABELS_PLURAL, type VehicleType } from "@/lib/domain";
 import { ENTITIES, type FieldDef } from "@/lib/admin/registry";
 import { upsertRow, deleteRow } from "@/app/fleet/admin/actions";
 import { generateDowntimeAct } from "@/app/fleet/office/documents/actions";
@@ -28,7 +30,7 @@ export function CrudTable({
 }: {
   slug: string;
   rows: Row[];
-  optionsByField: Record<string, { value: string; label: string }[]>;
+  optionsByField: Record<string, SearchSelectOption[]>;
 }) {
   const cfg = ENTITIES[slug];
   const router = useRouter();
@@ -46,6 +48,15 @@ export function CrudTable({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(0);
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+
+  // Фильтр-чипы по виду техники — только в справочнике «Техника».
+  const isVehicles = slug === "vehicles";
+  const presentTypes = isVehicles
+    ? (Object.keys(VEHICLE_TYPE_LABELS_PLURAL) as VehicleType[]).filter((t) =>
+        rows.some((r) => r.vehicle_type === t),
+      )
+    : [];
 
   function optionsFor(f: FieldDef) {
     if (f.options) return f.options;
@@ -69,6 +80,7 @@ export function CrudTable({
   const processed = useMemo(() => {
     let list = rows;
     if (activeOnly && hasActive) list = list.filter((r) => r.is_active);
+    if (isVehicles && typeFilter !== "all") list = list.filter((r) => r.vehicle_type === typeFilter);
     const query = q.trim().toLowerCase();
     if (query) {
       list = list.filter((r) =>
@@ -86,7 +98,7 @@ export function CrudTable({
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, activeOnly, q, sortKey, sortDir, hasActive]);
+  }, [rows, activeOnly, q, sortKey, sortDir, hasActive, isVehicles, typeFilter]);
 
   const pageCount = Math.max(1, Math.ceil(processed.length / PAGE_SIZE));
   const pageRows = processed.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
@@ -174,6 +186,20 @@ export function CrudTable({
         <Button size="sm" className="ml-auto" onClick={openNew}><Plus className="size-4" /> Добавить</Button>
       </div>
 
+      {presentTypes.length > 1 ? (
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1">
+          <TypeFilterChip label="Все" active={typeFilter === "all"} onClick={() => { setTypeFilter("all"); setPage(0); }} />
+          {presentTypes.map((t) => (
+            <TypeFilterChip
+              key={t}
+              label={VEHICLE_TYPE_LABELS_PLURAL[t]}
+              active={typeFilter === t}
+              onClick={() => { setTypeFilter(t); setPage(0); }}
+            />
+          ))}
+        </div>
+      ) : null}
+
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-left">
@@ -251,7 +277,16 @@ export function CrudTable({
                     <Label htmlFor={f.key} className={missing.has(f.key) ? "text-destructive" : ""}>
                       {f.label}{f.required ? " *" : ""}
                     </Label>
-                    {f.type === "select" ? (
+                    {f.type === "select" && optionsFor(f).length > 12 ? (
+                      // Длинный справочник (техника, договоры…) — выбор с поиском.
+                      <SearchSelect
+                        value={String(values[f.key] || "")}
+                        onChange={(val) => setValues((s) => ({ ...s, [f.key]: val }))}
+                        options={optionsFor(f)}
+                        allowEmpty={!f.required}
+                        triggerClassName={missing.has(f.key) ? "border-destructive" : ""}
+                      />
+                    ) : f.type === "select" ? (
                       <Select value={String(values[f.key] || NONE)} onValueChange={(val) => setValues((s) => ({ ...s, [f.key]: val === NONE ? "" : val }))}>
                         <SelectTrigger className={missing.has(f.key) ? "border-destructive" : ""}><SelectValue placeholder="—" /></SelectTrigger>
                         <SelectContent>
@@ -304,5 +339,19 @@ export function CrudTable({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function TypeFilterChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`h-8 shrink-0 rounded-full border px-3 text-sm ${
+        active ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-accent"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

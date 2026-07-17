@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { NumberKeypad } from "@/components/field/number-keypad";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { QrScanner } from "@/components/field/qr-scanner";
+import { VehiclePicker } from "@/components/field/vehicle-picker";
 import { toast } from "sonner";
 import { uploadReceipt, uploadSignature } from "@/lib/storage/upload";
 import { devError, devLog } from "@/lib/dev-log";
@@ -46,7 +47,6 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
   const [sigDataUrl, setSigDataUrl] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
   const [showSig, setShowSig] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,16 +76,6 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
   const litersNum = parseFloat(liters || "0");
   const overBalance =
     tankerBalance != null && litersNum > 0 && litersNum > tankerBalance;
-
-  const filteredVehicles = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return vehicles;
-    return vehicles.filter(
-      (v) =>
-        v.reg_number.toLowerCase().includes(q) ||
-        v.brand.toLowerCase().includes(q),
-    );
-  }, [vehicles, search]);
 
   function chooseSource(key: string) {
     setSourceKey(key);
@@ -258,14 +248,10 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
             </Button>
           </div>
         ) : (
-          <>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Гос. номер или марка"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-12"
-              />
+          <VehiclePicker
+            vehicles={vehicles}
+            onSelect={(v) => selectVehicle(v.id)}
+            searchTrailing={
               <Button
                 type="button"
                 variant="secondary"
@@ -274,26 +260,8 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
               >
                 <ScanLine className="size-5" /> QR
               </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {filteredVehicles.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => selectVehicle(v.id)}
-                  className="flex min-h-16 flex-col items-start justify-center rounded-lg border p-3 text-left active:bg-accent"
-                >
-                  <span className="text-lg font-bold tracking-tight">{v.reg_number}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {vehicleTypeLabel(v.vehicle_type)}
-                  </span>
-                </button>
-              ))}
-              {filteredVehicles.length === 0 ? (
-                <p className="col-span-2 text-sm text-muted-foreground">Ничего не найдено</p>
-              ) : null}
-            </div>
-          </>
+            }
+          />
         )}
       </section>
 

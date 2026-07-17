@@ -7,6 +7,7 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchSelect } from "@/components/ui/search-select";
 import { fmtMoney } from "@/lib/format";
 import { VEHICLE_TYPE_LABELS, vehicleTypeLabel, type VehicleType } from "@/lib/domain";
 import type { ContractDetail } from "@/lib/data/contracts-admin";
@@ -180,10 +181,12 @@ export function ContractDetailView({
             <option value="hour">час</option>
           </select>
           <Input inputMode="decimal" placeholder="Цена" value={pr.price} onChange={(e) => setPr((s) => ({ ...s, price: e.target.value.replace(/[^\d.]/g, "") }))} className="h-9" />
-          <select value={pr.vehicle_id} onChange={(e) => setPr((s) => ({ ...s, vehicle_id: e.target.value }))} className="h-9 rounded-md border bg-background px-2 text-sm">
-            <option value="">весь вид</option>
-            {data.vehicles.map((v) => <option key={v.id} value={v.id}>{v.reg_number}</option>)}
-          </select>
+          <SearchSelect
+            value={pr.vehicle_id}
+            onChange={(val) => setPr((s) => ({ ...s, vehicle_id: val }))}
+            options={data.vehicles.map((v) => ({ value: v.id, label: v.reg_number }))}
+            emptyLabel="весь вид"
+          />
           <Input type="date" value={pr.valid_from} onChange={(e) => setPr((s) => ({ ...s, valid_from: e.target.value }))} className="h-9" />
           <Button onClick={addPrice} disabled={pending} className="h-9">Добавить ставку</Button>
         </div>

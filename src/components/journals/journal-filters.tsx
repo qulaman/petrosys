@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchSelect } from "@/components/ui/search-select";
 import { PERIOD_LABELS, type PeriodPreset } from "@/lib/journals/period";
 import type { FilterOptions } from "@/lib/data/journals";
 
@@ -52,16 +53,13 @@ export function JournalFilters({ options }: { options: FilterOptions }) {
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <select
+        <SearchSelect
+          className="w-48"
           value={vehicleId}
-          onChange={(e) => update({ vehicle: e.target.value })}
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-        >
-          <option value="">Вся техника</option>
-          {options.vehicles.map((v) => (
-            <option key={v.id} value={v.id}>{v.reg_number}</option>
-          ))}
-        </select>
+          onChange={(val) => update({ vehicle: val })}
+          options={options.vehicles.map((v) => ({ value: v.id, label: v.reg_number }))}
+          emptyLabel="Вся техника"
+        />
         <select
           value={contractorId}
           onChange={(e) => update({ contractor: e.target.value })}

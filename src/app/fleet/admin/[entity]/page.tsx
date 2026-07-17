@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 import { ENTITIES } from "@/lib/admin/registry";
+import { vehicleTypeLabel } from "@/lib/domain";
 import { CrudTable } from "@/components/admin/crud-table";
 
 export default async function EntityPage({
@@ -28,18 +29,24 @@ export default async function EntityPage({
       from === "contractors"
         ? supabase.from("contractors").select("id, name").eq("is_active", true).order("name")
         : from === "vehicles"
-          ? supabase.from("vehicles").select("id, reg_number").eq("is_active", true).order("reg_number")
+          ? supabase
+              .from("vehicles")
+              .select("id, reg_number, vehicle_type")
+              .eq("is_active", true)
+              .order("vehicle_type")
+              .order("reg_number")
           : supabase.from("contracts").select("id, number").order("number"),
     ),
   ]);
   const rows = rowsRes.data;
 
-  const optionsByField: Record<string, { value: string; label: string }[]> = {};
+  const optionsByField: Record<string, { value: string; label: string; group?: string }[]> = {};
   optionSources.forEach(({ key, from }, i) => {
     const data = (optionResults[i]?.data ?? []) as Record<string, string>[];
     optionsByField[key] = data.map((r) => ({
       value: r.id,
       label: from === "vehicles" ? r.reg_number : from === "contracts" ? r.number : r.name,
+      ...(from === "vehicles" ? { group: vehicleTypeLabel(r.vehicle_type) } : {}),
     }));
   });
 
