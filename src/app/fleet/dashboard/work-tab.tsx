@@ -4,7 +4,7 @@ import {
   Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { fmtInt } from "@/lib/format";
-import type { WorkTabData } from "@/lib/data/dashboard";
+import type { HeatRow, WorkTabData } from "@/lib/data/dashboard";
 
 const axisTick = { fill: "var(--muted-foreground)", fontSize: 12 };
 const tooltipStyle = {
@@ -12,56 +12,58 @@ const tooltipStyle = {
   borderRadius: 8, color: "var(--popover-foreground)", fontSize: 13,
 };
 
-/** Тепловая карта активности + интервалы рейсов + выработка самосвалов. */
+/** Активность (часы и рейсы раздельно) + интервалы рейсов + выработка самосвалов. */
 export function WorkTab({ data }: { data: WorkTabData }) {
+  const singleDay = data.days.length === 1;
   return (
     <div className="flex flex-col gap-6">
-      {/* Теплокарта */}
+      {/* Моточасы */}
       <section className="flex flex-col gap-3">
         <h3 className="text-sm font-medium">
-          Активность: машина × день{" "}
-          <span className="text-muted-foreground">(моточасы — часы, самосвалы — рейсы)</span>
+          Моточасы <span className="text-muted-foreground">(часов за день · итог за период)</span>
         </h3>
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="border-collapse text-xs">
-            <thead>
-              <tr>
-                <th className="sticky left-0 bg-background px-2 py-1 text-left">Машина</th>
-                {data.days.map((d) => (
-                  <th key={d} className="px-1 py-1 font-normal text-muted-foreground">{d}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.rows.map((r) => (
-                <tr key={r.reg}>
-                  <td className="sticky left-0 bg-background px-2 py-1 font-medium whitespace-nowrap">
-                    {r.reg} <span className="text-muted-foreground">{r.type === "trips" ? "р" : "ч"}</span>
-                  </td>
-                  {r.cells.map((v, i) => (
-                    <td
-                      key={i}
-                      className="h-7 w-8 text-center tabular-nums"
-                      style={{
-                        background: v > 0
-                          ? `color-mix(in srgb, var(--chart-card) ${Math.round((v / data.maxCell) * 85) + 15}%, transparent)`
-                          : "transparent",
-                        color: v / data.maxCell > 0.6 ? "#fff" : "var(--foreground)",
-                      }}
-                      title={`${r.reg}: ${v}`}
-                    >
-                      {v > 0 ? fmtInt(v) : ""}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              {data.rows.length === 0 ? (
-                <tr><td className="px-2 py-4 text-muted-foreground">Нет техники</td></tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+        <HeatTable
+          days={data.days}
+          rows={data.hoursRows}
+          maxCell={data.maxHoursCell}
+          colorVar="var(--chart-card)"
+          emptyText="Нет техники на моточасах"
+        />
         <p className="text-xs text-muted-foreground">Пустые ячейки — простой/нет записей.</p>
+      </section>
+
+      {/* Рейсы */}
+      <section className="flex flex-col gap-3">
+        <h3 className="text-sm font-medium">
+          Рейсы самосвалов{" "}
+          <span className="text-muted-foreground">
+            {singleDay ? "(накопительно за день)" : "(рейсов за день · итог за период)"}
+          </span>
+        </h3>
+        {singleDay ? (
+          <div className="flex flex-col divide-y rounded-lg border">
+            {data.tripsRows.filter((r) => r.total > 0).map((r) => (
+              <div key={r.reg} className="flex items-center gap-3 px-3 py-2 text-sm">
+                <span className="w-28 shrink-0 font-medium">{r.reg}</span>
+                <span className="flex-1 truncate tracking-tight" style={{ color: "var(--chart-tanker)" }}>
+                  {"✕".repeat(Math.min(r.total, 40))}
+                </span>
+                <span className="font-semibold tabular-nums">{fmtInt(r.total)}</span>
+              </div>
+            ))}
+            {data.tripsRows.every((r) => r.total === 0) ? (
+              <p className="px-3 py-4 text-sm text-muted-foreground">Рейсов за день нет</p>
+            ) : null}
+          </div>
+        ) : (
+          <HeatTable
+            days={data.days}
+            rows={data.tripsRows}
+            maxCell={data.maxTripsCell}
+            colorVar="var(--chart-tanker)"
+            emptyText="Нет самосвалов"
+          />
+        )}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -114,6 +116,65 @@ export function WorkTab({ data }: { data: WorkTabData }) {
           <p className="text-xs text-muted-foreground">Пунктир — медиана парка: отстающие и лидеры видны сразу.</p>
         </section>
       </div>
+    </div>
+  );
+}
+
+function HeatTable({
+  days,
+  rows,
+  maxCell,
+  colorVar,
+  emptyText,
+}: {
+  days: string[];
+  rows: HeatRow[];
+  maxCell: number;
+  colorVar: string;
+  emptyText: string;
+}) {
+  const fmtVal = (n: number) => (Number.isInteger(n) ? fmtInt(n) : n.toFixed(1));
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="border-collapse text-xs">
+        <thead>
+          <tr>
+            <th className="sticky left-0 bg-background px-2 py-1 text-left">Машина</th>
+            {days.map((d) => (
+              <th key={d} className="px-1 py-1 font-normal text-muted-foreground">{d}</th>
+            ))}
+            <th className="px-2 py-1 text-right">Итого</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.reg}>
+              <td className="sticky left-0 bg-background px-2 py-1 font-medium whitespace-nowrap">{r.reg}</td>
+              {r.cells.map((v, i) => (
+                <td
+                  key={i}
+                  className="h-7 w-8 text-center tabular-nums"
+                  style={{
+                    background: v > 0
+                      ? `color-mix(in srgb, ${colorVar} ${Math.round((v / maxCell) * 85) + 15}%, transparent)`
+                      : "transparent",
+                    color: v / maxCell > 0.6 ? "#fff" : "var(--foreground)",
+                  }}
+                  title={`${r.reg}: ${v}`}
+                >
+                  {v > 0 ? fmtVal(v) : ""}
+                </td>
+              ))}
+              <td className="px-2 py-1 text-right font-semibold tabular-nums">
+                {r.total > 0 ? fmtVal(r.total) : ""}
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 ? (
+            <tr><td className="px-2 py-4 text-muted-foreground">{emptyText}</td></tr>
+          ) : null}
+        </tbody>
+      </table>
     </div>
   );
 }

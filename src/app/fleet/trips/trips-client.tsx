@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Check, RotateCw, ScanLine, X } from "lucide-react";
+import { AlertTriangle, Check, CopyPlus, FilePlus2, RotateCw, ScanLine, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { QrScanner } from "@/components/field/qr-scanner";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { useOutbox } from "@/lib/outbox/use-outbox";
@@ -14,11 +15,12 @@ import { fmtTime } from "@/lib/format";
 import { driverPoolFor } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { TripsScreenData } from "@/lib/data/trips";
-import { createTrip, deleteTrip } from "./actions";
+import { addLineupVehicle, createLineup, createTrip, deleteTrip, removeLineupVehicle } from "./actions";
 
 const ROUTE_KEY = "qo-trip-route";
 
 interface TripPayload {
+  lineup_id: string;
   route_id: string;
   vehicle_id: string;
   driver_id: string;
@@ -40,16 +42,20 @@ function getGeoFast(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export function TripsClient({ data }: { data: TripsScreenData }) {
-  const { routes, vehicles, drivers, lastDriverByVehicle, recentTrips } = data;
+  const { routes, vehicles, drivers, lastDriverByVehicle, recentTrips, lineup, lineupVehicleIds, previous } = data;
   const router = useRouter();
+  const pathname = usePathname();
 
   const [routeId, setRouteId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : localStorage.getItem(ROUTE_KEY),
   );
   const [search, setSearch] = useState("");
   const [showQr, setShowQr] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageSearch, setManageSearch] = useState("");
   const [pendingSig, setPendingSig] = useState<{ vehicle_id: string; driver_id: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
 
   const submit = useCallback((p: TripPayload) => createTrip(p), []);
   const onSuccess = useCallback(() => router.refresh(), [router]);
@@ -63,13 +69,30 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const vehById = useMemo(() => new Map(vehicles.map((v) => [v.id, v])), [vehicles]);
   const drvById = useMemo(() => new Map(drivers.map((d) => [d.id, d])), [drivers]);
 
+  const onLineSet = useMemo(() => new Set(lineupVehicleIds), [lineupVehicleIds]);
+  const onLineVehicles = vehicles.filter((v) => onLineSet.has(v.id));
+  const offLineVehicles = vehicles.filter((v) => !onLineSet.has(v.id));
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return vehicles;
-    return vehicles.filter(
+    if (!q) return onLineVehicles;
+    return onLineVehicles.filter(
       (v) => v.reg_number.toLowerCase().includes(q) || v.brand.toLowerCase().includes(q),
     );
-  }, [vehicles, search]);
+  }, [onLineVehicles, search]);
+
+  function setParams(date: string, shift: string) {
+    router.push(`${pathname}?date=${date}&shift=${shift}`);
+  }
+
+  function act(fn: () => Promise<{ ok: boolean; error?: string }>, okMsg?: string) {
+    start(async () => {
+      const res = await fn();
+      if (!res.ok) { toast.error(res.error ?? "Ошибка"); return; }
+      if (okMsg) toast.success(okMsg);
+      router.refresh();
+    });
+  }
 
   function chooseRoute(id: string) {
     setRouteId(id);
@@ -84,11 +107,12 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   }
 
   async function enqueueTrip(vehicleId: string, driverId: string, signaturePath: string | null) {
-    if (!routeId) return;
+    if (!routeId || !lineup) return;
     const v = vehById.get(vehicleId);
     const geo = await getGeoFast();
     add(
       {
+        lineup_id: lineup.id,
         route_id: routeId,
         vehicle_id: vehicleId,
         driver_id: driverId,
@@ -102,7 +126,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
 
   function recordTrip(vehicleId: string) {
     setError(null);
-    if (!routeId) return;
+    if (!routeId || !lineup) return;
     const driverId = driverForVehicle(vehicleId);
     if (!driverId) {
       setError("Для машины нет активного водителя");
@@ -121,11 +145,28 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
     const match =
       vehicles.find((v) => v.qr_code === t) ??
       vehicles.find((v) => v.reg_number.replace(/\s/g, "") === t.replace(/\s/g, ""));
-    if (match) recordTrip(match.id);
-    else setError("QR не распознан. Выберите машину из сетки.");
+    if (!match) {
+      setError("QR не распознан. Выберите машину из сетки.");
+      return;
+    }
+    if (!onLineSet.has(match.id)) {
+      // Машина ещё не выведена на линию — предлагаем вывести и сразу записать рейс.
+      if (!lineup) return;
+      if (!window.confirm(`${match.reg_number} не на линии. Вывести на линию и записать рейс?`)) return;
+      start(async () => {
+        const res = await addLineupVehicle({ lineup_id: lineup.id, vehicle_id: match.id });
+        if (!res.ok) { toast.error(res.error ?? "Ошибка"); return; }
+        recordTrip(match.id);
+        router.refresh();
+      });
+      return;
+    }
+    recordTrip(match.id);
   }
 
+  // ---------------------------------------------------------------------------
   // Выбор маршрута в начале смены
+  // ---------------------------------------------------------------------------
   if (!route) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-3">
@@ -144,10 +185,84 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Этап 1 — вывода на линию ещё нет: наследование или чистый лист
+  // ---------------------------------------------------------------------------
+  if (!lineup) {
+    return (
+      <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+        <ShiftPicker date={data.date} shift={data.shift} onChange={setParams} />
+
+        <p className="text-sm text-muted-foreground">
+          Самосвалы на эту смену ещё не выведены на линию. Сформируйте перечень:
+        </p>
+
+        {previous ? (
+          <Button
+            className="h-20 justify-start gap-3 text-left"
+            disabled={pending}
+            onClick={() =>
+              act(
+                () =>
+                  createLineup({
+                    work_date: data.date,
+                    shift_type: data.shift,
+                    inherit_from: previous.id,
+                  }),
+                "Перечень унаследован",
+              )
+            }
+          >
+            <CopyPlus className="size-6 shrink-0" />
+            <span>
+              <span className="block font-semibold">Наследовать предыдущую смену</span>
+              <span className="block text-xs opacity-80">
+                {previous.work_date} · {previous.shift_type === "day" ? "день" : "ночь"} · машин: {previous.vehicleCount}
+              </span>
+            </span>
+          </Button>
+        ) : null}
+
+        <Button
+          variant="outline"
+          className="h-20 justify-start gap-3 text-left"
+          disabled={pending}
+          onClick={() =>
+            act(
+              () =>
+                createLineup({
+                  work_date: data.date,
+                  shift_type: data.shift,
+                  inherit_from: null,
+                }),
+              "Перечень создан",
+            )
+          }
+        >
+          <FilePlus2 className="size-6 shrink-0" />
+          <span>
+            <span className="block font-semibold">С чистого листа</span>
+            <span className="block text-xs text-muted-foreground">Вывод машин вручную</span>
+          </span>
+        </Button>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Этап 2 — фиксация рейсов по машинам на линии
+  // ---------------------------------------------------------------------------
   const hasUnsent = pendingCount > 0;
+  const manageQuery = manageSearch.trim().toLowerCase();
+  const manageMatch = (v: { reg_number: string; brand: string }) =>
+    manageQuery === "" ||
+    v.reg_number.toLowerCase().includes(manageQuery) ||
+    v.brand.toLowerCase().includes(manageQuery);
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-4 pb-6">
+      <ShiftPicker date={data.date} shift={data.shift} onChange={setParams} />
+
       <div className="flex items-center justify-between rounded-lg border p-3">
         <div>
           <p className="text-xs text-muted-foreground">Маршрут смены</p>
@@ -192,7 +307,75 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
           </button>
         ))}
         {filtered.length === 0 ? (
-          <p className="col-span-2 text-sm text-muted-foreground">Самосвалы не найдены</p>
+          <p className="col-span-2 text-sm text-muted-foreground">
+            {onLineVehicles.length === 0
+              ? "На линии пока нет машин — выведите их ниже."
+              : "Самосвалы не найдены"}
+          </p>
+        ) : null}
+      </div>
+
+      {/* Управление линией: вывести/снять машину в течение смены */}
+      <div className="flex flex-col gap-2">
+        <Button variant="secondary" className="h-12" onClick={() => setManageOpen((v) => !v)}>
+          <Truck className="size-5" /> На линии: {onLineVehicles.length} · Вывести машину
+        </Button>
+        {manageOpen ? (
+          <div className="flex flex-col gap-3 rounded-lg border p-3">
+            <Input
+              placeholder="Поиск: гос. номер или марка"
+              value={manageSearch}
+              onChange={(e) => setManageSearch(e.target.value)}
+              className="h-11"
+            />
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Не на линии — нажмите, чтобы вывести</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {offLineVehicles.filter(manageMatch).map((v) => (
+                  <button
+                    key={v.id}
+                    disabled={pending}
+                    onClick={() =>
+                      act(() => addLineupVehicle({ lineup_id: lineup.id, vehicle_id: v.id }), `${v.reg_number} на линии`)
+                    }
+                    className="flex min-h-14 flex-col items-start justify-center rounded-lg border p-2.5 text-left active:bg-accent"
+                  >
+                    <span className="font-bold tracking-tight">{v.reg_number}</span>
+                    <span className="text-xs text-muted-foreground">{v.brand}</span>
+                  </button>
+                ))}
+                {offLineVehicles.filter(manageMatch).length === 0 ? (
+                  <p className="col-span-2 text-sm text-muted-foreground">Все самосвалы уже на линии</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>На линии — нажмите, чтобы снять (пока нет рейсов)</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {onLineVehicles.filter(manageMatch).map((v) => (
+                  <button
+                    key={v.id}
+                    disabled={pending}
+                    onClick={() =>
+                      act(() => removeLineupVehicle({ lineup_id: lineup.id, vehicle_id: v.id }), `${v.reg_number} снята с линии`)
+                    }
+                    className="flex min-h-14 items-center justify-between rounded-lg border p-2.5 text-left active:bg-accent"
+                  >
+                    <span>
+                      <span className="block font-bold tracking-tight">{v.reg_number}</span>
+                      <span className="block text-xs text-muted-foreground">{v.brand}</span>
+                    </span>
+                    <X className="size-4 text-destructive" />
+                  </button>
+                ))}
+                {onLineVehicles.filter(manageMatch).length === 0 ? (
+                  <p className="col-span-2 text-sm text-muted-foreground">На линии нет машин</p>
+                ) : null}
+              </div>
+            </div>
+          </div>
         ) : null}
       </div>
 
@@ -270,6 +453,32 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
           onCancel={() => setPendingSig(null)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function ShiftPicker({
+  date,
+  shift,
+  onChange,
+}: {
+  date: string;
+  shift: "day" | "night";
+  onChange: (date: string, shift: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="tr-date">Дата</Label>
+        <Input id="tr-date" type="date" value={date} onChange={(e) => onChange(e.target.value, shift)} className="h-12" />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label>Смена</Label>
+        <div className="grid grid-cols-2 gap-1">
+          <Button type="button" className="h-12" variant={shift === "day" ? "default" : "outline"} onClick={() => onChange(date, "day")}>День</Button>
+          <Button type="button" className="h-12" variant={shift === "night" ? "default" : "outline"} onClick={() => onChange(date, "night")}>Ночь</Button>
+        </div>
+      </div>
     </div>
   );
 }

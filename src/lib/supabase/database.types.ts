@@ -643,6 +643,38 @@ export type Database = {
           },
         ]
       }
+      org_settings: {
+        Row: {
+          no_fuel_days_hours: number
+          no_fuel_days_trips: number
+          org_id: string
+          tanker_gap_liters: number
+          updated_at: string
+        }
+        Insert: {
+          no_fuel_days_hours?: number
+          no_fuel_days_trips?: number
+          org_id?: string
+          tanker_gap_liters?: number
+          updated_at?: string
+        }
+        Update: {
+          no_fuel_days_hours?: number
+          no_fuel_days_trips?: number
+          org_id?: string
+          tanker_gap_liters?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -1151,6 +1183,90 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tankers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_lineup_vehicles: {
+        Row: {
+          added_at: string
+          added_by: string
+          id: string
+          lineup_id: string
+          org_id: string
+          vehicle_id: string
+        }
+        Insert: {
+          added_at?: string
+          added_by?: string
+          id?: string
+          lineup_id: string
+          org_id?: string
+          vehicle_id: string
+        }
+        Update: {
+          added_at?: string
+          added_by?: string
+          id?: string
+          lineup_id?: string
+          org_id?: string
+          vehicle_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_lineup_vehicles_lineup_id_fkey"
+            columns: ["lineup_id"]
+            isOneToOne: false
+            referencedRelation: "trip_lineups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_lineup_vehicles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_lineup_vehicles_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_lineups: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          org_id: string
+          shift_type: string
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          org_id?: string
+          shift_type: string
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          org_id?: string
+          shift_type?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_lineups_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"

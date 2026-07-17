@@ -9,7 +9,9 @@ export type VehicleType =
   | "excavator"
   | "dozer"
   | "roller"
-  | "water_truck";
+  | "water_truck"
+  | "loader"
+  | "other";
 
 export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
   dump_truck: "Самосвал",
@@ -18,6 +20,20 @@ export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
   dozer: "Бульдозер",
   roller: "Каток",
   water_truck: "Водовоз",
+  loader: "Погрузчик",
+  other: "Прочее",
+};
+
+/** Множественные подписи — для вкладок-фильтров по типу техники. */
+export const VEHICLE_TYPE_LABELS_PLURAL: Record<VehicleType, string> = {
+  dump_truck: "Автосамосвалы",
+  grader: "Грейдеры",
+  excavator: "Экскаваторы",
+  dozer: "Бульдозеры",
+  roller: "Катки",
+  water_truck: "Водовозы",
+  loader: "Погрузчики",
+  other: "Прочее",
 };
 
 export type AccountingType = "hours" | "trips";

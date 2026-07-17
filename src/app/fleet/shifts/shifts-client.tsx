@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { uploadSignature } from "@/lib/storage/upload";
-import { driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
+import { driverPoolFor, vehicleTypeLabel, VEHICLE_TYPE_LABELS_PLURAL, type VehicleType } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { JournalLine, ShiftJournalData } from "@/lib/data/shifts";
 import { addLine, closeJournal, createJournal, removeLine, reopenJournal, updateJournal, updateLine } from "./actions";
@@ -27,6 +27,8 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
 
   const [pending, start] = useTransition();
   const [addOpen, setAddOpen] = useState(false);
+  const [addType, setAddType] = useState<string>("all");
+  const [addSearch, setAddSearch] = useState("");
   const [signLine, setSignLine] = useState<JournalLine | null>(null);
   const [signItr, setSignItr] = useState(false);
   const [hoursDraft, setHoursDraft] = useState<Record<string, string>>({});
@@ -35,6 +37,20 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
   const drvById = useMemo(() => new Map(drivers.map((d) => [d.id, d])), [drivers]);
   const usedVehicleIds = new Set(lines.map((l) => l.vehicle_id));
   const availableVehicles = vehicles.filter((v) => !usedVehicleIds.has(v.id));
+
+  // Вкладки по типам техники в окне добавления: только реально присутствующие типы.
+  const addTypes = (Object.keys(VEHICLE_TYPE_LABELS_PLURAL) as VehicleType[]).filter((t) =>
+    availableVehicles.some((v) => v.vehicle_type === t),
+  );
+  const effAddType = addType !== "all" && addTypes.includes(addType as VehicleType) ? addType : "all";
+  const addQuery = addSearch.trim().toLowerCase();
+  const shownVehicles = availableVehicles.filter(
+    (v) =>
+      (effAddType === "all" || v.vehicle_type === effAddType) &&
+      (addQuery === "" ||
+        v.reg_number.toLowerCase().includes(addQuery) ||
+        v.brand.toLowerCase().includes(addQuery)),
+  );
 
   const signedCount = lines.filter((l) => l.driver_signature_url).length;
   const allSigned = lines.length > 0 && signedCount === lines.length;
@@ -234,26 +250,48 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
             <Plus className="size-5" /> Добавить технику
           </Button>
           {addOpen ? (
-            <div className="grid grid-cols-2 gap-2">
-              {availableVehicles.map((v) => (
-                <button
-                  key={v.id}
-                  disabled={pending}
-                  onClick={() => {
-                    const driverId = driverFor(v.id);
-                    if (!driverId) { toast.error("Нет активных водителей"); return; }
-                    act(() => addLine({ journal_id: journal.id, vehicle_id: v.id, driver_id: driverId }), `${v.reg_number} добавлена`);
-                  }}
-                  className="flex min-h-16 flex-col items-start justify-center rounded-lg border p-3 text-left active:bg-accent"
-                >
-                  <span className="text-lg font-bold tracking-tight">{v.reg_number}</span>
-                  <span className="text-xs text-muted-foreground">{vehicleTypeLabel(v.vehicle_type)}</span>
-                </button>
-              ))}
-              {availableVehicles.length === 0 ? (
-                <p className="col-span-2 text-sm text-muted-foreground">Вся техника уже в перечне</p>
-              ) : null}
-            </div>
+            <>
+              {/* Вкладки по типу техники — быстрый переход к нужным гос. номерам */}
+              <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+                <TypeChip label="Все" active={effAddType === "all"} onClick={() => setAddType("all")} />
+                {addTypes.map((t) => (
+                  <TypeChip
+                    key={t}
+                    label={VEHICLE_TYPE_LABELS_PLURAL[t]}
+                    active={effAddType === t}
+                    onClick={() => setAddType(t)}
+                  />
+                ))}
+              </div>
+              <Input
+                placeholder="Поиск: гос. номер или марка"
+                value={addSearch}
+                onChange={(e) => setAddSearch(e.target.value)}
+                className="h-11"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                {shownVehicles.map((v) => (
+                  <button
+                    key={v.id}
+                    disabled={pending}
+                    onClick={() => {
+                      const driverId = driverFor(v.id);
+                      if (!driverId) { toast.error("Нет активных водителей"); return; }
+                      act(() => addLine({ journal_id: journal.id, vehicle_id: v.id, driver_id: driverId }), `${v.reg_number} добавлена`);
+                    }}
+                    className="flex min-h-16 flex-col items-start justify-center rounded-lg border p-3 text-left active:bg-accent"
+                  >
+                    <span className="text-lg font-bold tracking-tight">{v.reg_number}</span>
+                    <span className="text-xs text-muted-foreground">{vehicleTypeLabel(v.vehicle_type)}</span>
+                  </button>
+                ))}
+                {shownVehicles.length === 0 ? (
+                  <p className="col-span-2 text-sm text-muted-foreground">
+                    {availableVehicles.length === 0 ? "Вся техника уже в перечне" : "Ничего не найдено"}
+                  </p>
+                ) : null}
+              </div>
+            </>
           ) : null}
         </div>
       ) : null}
@@ -334,6 +372,20 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
         />
       ) : null}
     </div>
+  );
+}
+
+function TypeChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`h-9 shrink-0 rounded-full border px-3 text-sm font-medium ${
+        active ? "border-primary bg-primary text-primary-foreground" : "bg-background active:bg-accent"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

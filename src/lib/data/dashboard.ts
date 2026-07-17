@@ -274,14 +274,17 @@ export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabDa
 }
 
 // =============================== ВКЛАДКА «РАБОТА» ===============================
-export interface HeatCell { value: number }
-export interface HeatRow { reg: string; type: "hours" | "trips"; cells: number[] }
+export interface HeatRow { reg: string; cells: number[]; total: number }
 export interface IntervalBucket { label: string; count: number }
 export interface ProductivityRow { reg: string; avgPerDay: number }
 export interface WorkTabData {
   days: string[]; // dd.mm
-  rows: HeatRow[];
-  maxCell: number;
+  /** Техника на моточасах: часы по дням + итог за период. */
+  hoursRows: HeatRow[];
+  maxHoursCell: number;
+  /** Самосвалы: рейсы по дням + итог за период. */
+  tripsRows: HeatRow[];
+  maxTripsCell: number;
   /** Гистограмма интервалов между рейсами (все самосвалы), минуты. */
   intervalBuckets: IntervalBucket[];
   intervalMedian: number | null;
@@ -313,17 +316,24 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
     hoursSum.set(k, (hoursSum.get(k) ?? 0) + Number(s.hours));
   }
 
-  let maxCell = 0;
-  const rows: HeatRow[] = (veh.data ?? []).map((v) => {
+  // Часы и рейсы — раздельно: своя таблица и своя шкала подсветки.
+  let maxHoursCell = 0;
+  let maxTripsCell = 0;
+  const hoursRows: HeatRow[] = [];
+  const tripsRows: HeatRow[] = [];
+  for (const v of veh.data ?? []) {
+    const isTrips = v.accounting_type === "trips";
     const cells = days.map((d) => {
-      const val = v.accounting_type === "trips"
+      const val = isTrips
         ? tripCount.get(`${v.id}|${d}`) ?? 0
         : hoursSum.get(`${v.id}|${d}`) ?? 0;
-      if (val > maxCell) maxCell = val;
+      if (isTrips) { if (val > maxTripsCell) maxTripsCell = val; }
+      else if (val > maxHoursCell) maxHoursCell = val;
       return val;
     });
-    return { reg: v.reg_number, type: v.accounting_type as "hours" | "trips", cells };
-  });
+    const total = Math.round(cells.reduce((s, n) => s + n, 0) * 10) / 10;
+    (isTrips ? tripsRows : hoursRows).push({ reg: v.reg_number, cells, total });
+  }
 
   // Интервалы между рейсами: сортируем ходки каждой машины по дню, разницы в минутах.
   const tripsByVehDay = new Map<string, number[]>();
@@ -362,8 +372,10 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
 
   return {
     days: days.map((d) => `${d.slice(8, 10)}.${d.slice(5, 7)}`),
-    rows,
-    maxCell: Math.max(1, maxCell),
+    hoursRows,
+    maxHoursCell: Math.max(1, maxHoursCell),
+    tripsRows,
+    maxTripsCell: Math.max(1, maxTripsCell),
     intervalBuckets,
     intervalMedian,
     productivity,
