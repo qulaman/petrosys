@@ -86,13 +86,13 @@ export function SettlementView({ settlement: s }: { settlement: Settlement }) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={exportXlsx} disabled={pending}>
+          <Button variant="outline" onClick={exportXlsx} loading={pending}>
             <Download className="size-4" /> Акт в Excel
           </Button>
-          <Button variant="outline" onClick={saveDoc} disabled={pending}>
+          <Button variant="outline" onClick={saveDoc} loading={pending}>
             Акт в Документы
           </Button>
-          <Button onClick={savePackage} disabled={pending}>
+          <Button onClick={savePackage} loading={pending}>
             {pending ? "Формирую…" : "Пакет закрытия (АВР + акт + реестры)"}
           </Button>
         </div>

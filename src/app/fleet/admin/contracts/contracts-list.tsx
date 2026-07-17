@@ -194,7 +194,7 @@ export function ContractsList({
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={create} disabled={pending}>{pending ? "Создаю…" : "Создать договор + документы"}</Button>
+            <Button onClick={create} loading={pending}>{pending ? "Создаю…" : "Создать договор + документы"}</Button>
             <Button variant="outline" onClick={() => setCreating(false)}>Отмена</Button>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { QrScanner } from "@/components/field/qr-scanner";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
+import { useNavProgress } from "@/components/nav-progress";
 import { useOutbox } from "@/lib/outbox/use-outbox";
 import { uploadSignature } from "@/lib/storage/upload";
 import { fmtTime } from "@/lib/format";
@@ -72,8 +73,9 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const onLineVehicles = vehicles.filter((v) => onLineSet.has(v.id));
   const offLineVehicles = vehicles.filter((v) => !onLineSet.has(v.id));
 
+  const nav = useNavProgress();
   function setParams(date: string, shift: string) {
-    router.push(`${pathname}?date=${date}&shift=${shift}`);
+    nav.push(`${pathname}?date=${date}&shift=${shift}`);
   }
 
   function act(fn: () => Promise<{ ok: boolean; error?: string }>, okMsg?: string) {
@@ -191,7 +193,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         {previous ? (
           <Button
             className="h-20 justify-start gap-3 text-left"
-            disabled={pending}
+            loading={pending}
             onClick={() =>
               act(
                 () =>
@@ -217,7 +219,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         <Button
           variant="outline"
           className="h-20 justify-start gap-3 text-left"
-          disabled={pending}
+          loading={pending}
           onClick={() =>
             act(
               () =>

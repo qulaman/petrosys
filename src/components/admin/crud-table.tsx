@@ -306,7 +306,7 @@ export function CrudTable({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)}>Отмена</Button>
-            <Button onClick={save} disabled={pending}>{pending ? "Сохранение…" : "Сохранить"}</Button>
+            <Button onClick={save} loading={pending}>{pending ? "Сохранение…" : "Сохранить"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -323,7 +323,7 @@ export function CrudTable({
               </p>
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setToDelete(null); setDeleteBlocked(false); }}>Отмена</Button>
-                <Button onClick={deactivateInstead} disabled={pending}>{pending ? "Сохранение…" : "Деактивировать"}</Button>
+                <Button onClick={deactivateInstead} loading={pending}>{pending ? "Сохранение…" : "Деактивировать"}</Button>
               </DialogFooter>
             </>
           ) : (
@@ -332,7 +332,7 @@ export function CrudTable({
               <p className="text-sm text-muted-foreground">Действие необратимо.</p>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setToDelete(null)}>Отмена</Button>
-                <Button variant="destructive" onClick={confirmDelete} disabled={pending}>Удалить</Button>
+                <Button variant="destructive" onClick={confirmDelete} loading={pending}>Удалить</Button>
               </DialogFooter>
             </>
           )}

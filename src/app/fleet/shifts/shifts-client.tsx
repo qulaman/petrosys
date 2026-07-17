@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
+import { useNavProgress } from "@/components/nav-progress";
 import { uploadSignature } from "@/lib/storage/upload";
 import { driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
@@ -42,8 +43,9 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
   const isClosed = journal?.status === "closed";
   const isDraft = journal?.status === "draft";
 
+  const nav = useNavProgress();
   function setParams(date: string, shift: string) {
-    router.push(`${pathname}?date=${date}&shift=${shift}`);
+    nav.push(`${pathname}?date=${date}&shift=${shift}`);
   }
 
   function driverFor(vehicleId: string): string | null {
@@ -77,7 +79,7 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
         {previous ? (
           <Button
             className="h-20 justify-start gap-3 text-left"
-            disabled={pending}
+            loading={pending}
             onClick={() =>
               act(
                 () =>
@@ -104,7 +106,7 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
         <Button
           variant="outline"
           className="h-20 justify-start gap-3 text-left"
-          disabled={pending}
+          loading={pending}
           onClick={() =>
             act(
               () =>
@@ -253,7 +255,8 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
       {isDraft ? (
         <Button
           className="h-14 text-lg"
-          disabled={pending || lines.length === 0}
+          loading={pending}
+          disabled={lines.length === 0}
           onClick={() => act(() => updateJournal(journal.id, { status: "filling" }), "Перечень зафиксирован — заполняйте часы")}
         >
           Перечень готов → к часам и подписям
@@ -261,7 +264,7 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
       ) : null}
 
       {journal.status === "filling" ? (
-        <Button className="h-14 text-lg" disabled={pending || !allSigned} onClick={() => setSignItr(true)}>
+        <Button className="h-14 text-lg" loading={pending} disabled={!allSigned} onClick={() => setSignItr(true)}>
           {allSigned ? "Закрыть журнал (подпись мастера)" : `Ожидают подписи: ${lines.length - signedCount}`}
         </Button>
       ) : null}
@@ -275,7 +278,7 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
             <Button
               variant="outline"
               className="h-12"
-              disabled={pending}
+              loading={pending}
               onClick={() => {
                 if (!window.confirm("Переоткрыть журнал? Подпись мастера будет снята — после правок журнал нужно закрыть заново."))
                   return;

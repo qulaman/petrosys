@@ -1,5 +1,7 @@
-import Link from "next/link";
-import { AlertTriangle } from "lucide-react";
+"use client";
+
+import Link, { useLinkStatus } from "next/link";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -8,6 +10,17 @@ const TABS = [
   { key: "work", label: "Работа" },
   { key: "money", label: "Подрядчики и деньги" },
 ];
+
+/** Спиннер внутри <Link>, пока грузится страница назначения (фикс. ширина — без прыжков). */
+function LinkSpinner() {
+  const { pending } = useLinkStatus();
+  return (
+    <Loader2
+      className={cn("size-3.5 shrink-0 animate-spin transition-opacity", pending ? "opacity-100" : "opacity-0")}
+      aria-hidden
+    />
+  );
+}
 
 export function DashboardNav({
   active,
@@ -23,11 +36,12 @@ export function DashboardNav({
           key={t.key}
           href={`/fleet/dashboard?tab=${t.key}`}
           className={cn(
-            "rounded-md px-3 py-1.5 text-sm font-medium",
+            "flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium",
             active === t.key ? "bg-accent" : "hover:bg-accent",
           )}
         >
           {t.label}
+          <LinkSpinner />
         </Link>
       ))}
       <Link
@@ -41,6 +55,7 @@ export function DashboardNav({
             {newAnomalies}
           </span>
         ) : null}
+        <LinkSpinner />
       </Link>
     </div>
   );

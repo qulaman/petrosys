@@ -46,7 +46,7 @@ export function LoginForm() {
         </p>
       ) : null}
 
-      <Button type="submit" disabled={pending} className="h-12 text-base">
+      <Button type="submit" loading={pending} className="h-12 text-base">
         {pending ? ru.auth.signingIn : ru.common.signIn}
       </Button>
     </form>

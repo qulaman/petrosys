@@ -187,7 +187,7 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
             </label>
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button className="h-14 text-lg" disabled={pending} onClick={submitRefill}>
+          <Button className="h-14 text-lg" loading={pending} onClick={submitRefill}>
             {pending ? "Сохранение…" : "Принять приход"}
           </Button>
         </section>
@@ -215,7 +215,7 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
             <Input id="m-note" value={mNote} onChange={(e) => setMNote(e.target.value)} className="h-12" />
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button className="h-14 text-lg" disabled={pending} onClick={submitMeasure}>
+          <Button className="h-14 text-lg" loading={pending} onClick={submitMeasure}>
             {pending ? "Сохранение…" : "Сохранить замер"}
           </Button>
         </section>

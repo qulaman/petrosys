@@ -359,7 +359,8 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
         <div className="mx-auto max-w-md">
           <Button
             className="h-14 w-full text-lg"
-            disabled={!canSubmit || pending}
+            loading={pending}
+            disabled={!canSubmit}
             onClick={submit}
           >
             {pending ? "Сохранение…" : `Выдать ${litersNum > 0 ? fmtInt(litersNum) + " л" : ""}`}

@@ -146,7 +146,7 @@ export function ContractDetailView({
         <div className="flex flex-col gap-1.5"><Label>Действует с</Label><Input type="date" value={form.valid_from} onChange={(e) => setForm((s) => ({ ...s, valid_from: e.target.value }))} /></div>
         <div className="flex flex-col gap-1.5"><Label>по</Label><Input type="date" value={form.valid_to} onChange={(e) => setForm((s) => ({ ...s, valid_to: e.target.value }))} /></div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm((s) => ({ ...s, is_active: e.target.checked }))} className="size-4" /> Активен</label>
-        <div className="sm:col-span-2"><Button onClick={saveContract} disabled={pending}>Сохранить договор</Button></div>
+        <div className="sm:col-span-2"><Button onClick={saveContract} loading={pending}>Сохранить договор</Button></div>
       </section>
 
       {/* Прайс-лист */}
@@ -188,7 +188,7 @@ export function ContractDetailView({
             emptyLabel="весь вид"
           />
           <Input type="date" value={pr.valid_from} onChange={(e) => setPr((s) => ({ ...s, valid_from: e.target.value }))} className="h-9" />
-          <Button onClick={addPrice} disabled={pending} className="h-9">Добавить ставку</Button>
+          <Button onClick={addPrice} loading={pending} className="h-9">Добавить ставку</Button>
         </div>
       </section>
 
@@ -215,7 +215,7 @@ export function ContractDetailView({
           <Input inputMode="decimal" placeholder="₸/литр" value={fp.price_per_liter} onChange={(e) => setFp((s) => ({ ...s, price_per_liter: e.target.value.replace(/[^\d.]/g, "") }))} className="h-9" />
           <Input type="date" value={fp.valid_from} onChange={(e) => setFp((s) => ({ ...s, valid_from: e.target.value }))} className="h-9" />
           <Input placeholder="Примечание" value={fp.note} onChange={(e) => setFp((s) => ({ ...s, note: e.target.value }))} className="h-9" />
-          <Button onClick={addFuel} disabled={pending} className="h-9">Добавить цену ГСМ</Button>
+          <Button onClick={addFuel} loading={pending} className="h-9">Добавить цену ГСМ</Button>
         </div>
       </section>
 
@@ -231,11 +231,11 @@ export function ContractDetailView({
                 {fittingTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
-            <Button variant="outline" onClick={regenContract} disabled={pending}>
+            <Button variant="outline" onClick={regenContract} loading={pending}>
               Сформировать договор (docx)
             </Button>
           </div>
-          <Button variant="outline" onClick={genAppendix2} disabled={pending}>
+          <Button variant="outline" onClick={genAppendix2} loading={pending}>
             Приложение №2 (новая редакция)
           </Button>
           <div className="ml-auto flex items-end gap-2">
@@ -243,7 +243,7 @@ export function ContractDetailView({
               <Label className="text-xs">Изменения с даты</Label>
               <Input type="date" value={amendDate} onChange={(e) => setAmendDate(e.target.value)} className="h-9 w-40" />
             </div>
-            <Button variant="outline" onClick={genAmendment} disabled={pending}>
+            <Button variant="outline" onClick={genAmendment} loading={pending}>
               Сформировать доп. соглашение
             </Button>
           </div>

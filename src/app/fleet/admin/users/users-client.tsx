@@ -156,7 +156,7 @@ export function UsersClient({ data }: { data: UsersScreenData }) {
 
           {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
           <div className="mt-4 flex gap-2">
-            <Button onClick={save} disabled={pending}>
+            <Button onClick={save} loading={pending}>
               {pending ? "Сохранение…" : "Сохранить"}
             </Button>
             <Button variant="outline" onClick={() => setEditing(null)}>Отмена</Button>

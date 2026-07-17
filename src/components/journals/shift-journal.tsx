@@ -124,7 +124,7 @@ export function ShiftJournal({
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setToDelete(null)}>Отмена</Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={pending}>Удалить</Button>
+            <Button variant="destructive" onClick={confirmDelete} loading={pending}>Удалить</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

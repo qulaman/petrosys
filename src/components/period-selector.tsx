@@ -1,20 +1,23 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useNavProgress } from "@/components/nav-progress";
 import { PERIOD_LABELS, type PeriodPreset } from "@/lib/journals/period";
 
 const PRESETS: PeriodPreset[] = ["today", "7d", "15d", "month", "custom"];
 
 /** Лёгкий селектор периода (без фильтров машины/подрядчика). Пишет ?period/from/to. */
 export function PeriodSelector({ extraParams }: { extraParams?: Record<string, string> }) {
-  const router = useRouter();
+  const { pending, push } = useNavProgress();
   const pathname = usePathname();
   const sp = useSearchParams();
   const period = (sp.get("period") as PeriodPreset) || "month";
   const from = sp.get("from") ?? "";
   const to = sp.get("to") ?? "";
+  const [clicked, setClicked] = useState<PeriodPreset | null>(null);
 
   function update(patch: Record<string, string | null>) {
     const p = new URLSearchParams(sp.toString());
@@ -22,7 +25,7 @@ export function PeriodSelector({ extraParams }: { extraParams?: Record<string, s
       if (v == null || v === "") p.delete(k);
       else p.set(k, v);
     }
-    router.push(`${pathname}?${p.toString()}`);
+    push(`${pathname}?${p.toString()}`);
   }
 
   return (
@@ -30,7 +33,8 @@ export function PeriodSelector({ extraParams }: { extraParams?: Record<string, s
       <div className="flex flex-wrap gap-1">
         {PRESETS.map((p) => (
           <Button key={p} size="sm" variant={period === p ? "default" : "outline"}
-            onClick={() => update({ period: p, ...(p !== "custom" ? { from: null, to: null } : {}) })}>
+            loading={pending && clicked === p}
+            onClick={() => { setClicked(p); update({ period: p, ...(p !== "custom" ? { from: null, to: null } : {}) }); }}>
             {PERIOD_LABELS[p]}
           </Button>
         ))}

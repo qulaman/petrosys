@@ -142,7 +142,7 @@ export function TemplatesClient({ rows }: { rows: TemplateRow[] }) {
           <Label>Файл .docx *</Label>
           <div className="flex gap-2">
             <input ref={uploadRef} type="file" accept=".docx" className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5" />
-            <Button onClick={submitUpload} disabled={pending}><Upload className="size-4" /> Загрузить</Button>
+            <Button onClick={submitUpload} loading={pending}><Upload className="size-4" /> Загрузить</Button>
           </div>
         </div>
       </section>

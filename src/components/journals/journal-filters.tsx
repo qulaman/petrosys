@@ -1,16 +1,18 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
+import { useNavProgress } from "@/components/nav-progress";
 import { PERIOD_LABELS, type PeriodPreset } from "@/lib/journals/period";
 import type { FilterOptions } from "@/lib/data/journals";
 
 const PRESETS: PeriodPreset[] = ["today", "7d", "15d", "month", "custom"];
 
 export function JournalFilters({ options }: { options: FilterOptions }) {
-  const router = useRouter();
+  const { pending, push } = useNavProgress();
   const pathname = usePathname();
   const sp = useSearchParams();
 
@@ -19,6 +21,7 @@ export function JournalFilters({ options }: { options: FilterOptions }) {
   const to = sp.get("to") ?? "";
   const vehicleId = sp.get("vehicle") ?? "";
   const contractorId = sp.get("contractor") ?? "";
+  const [clicked, setClicked] = useState<PeriodPreset | null>(null);
 
   function update(patch: Record<string, string | null>) {
     const p = new URLSearchParams(sp.toString());
@@ -26,7 +29,7 @@ export function JournalFilters({ options }: { options: FilterOptions }) {
       if (v == null || v === "") p.delete(k);
       else p.set(k, v);
     }
-    router.push(`${pathname}?${p.toString()}`);
+    push(`${pathname}?${p.toString()}`);
   }
 
   return (
@@ -37,7 +40,8 @@ export function JournalFilters({ options }: { options: FilterOptions }) {
             key={p}
             size="sm"
             variant={period === p ? "default" : "outline"}
-            onClick={() => update({ period: p, ...(p !== "custom" ? { from: null, to: null } : {}) })}
+            loading={pending && clicked === p}
+            onClick={() => { setClicked(p); update({ period: p, ...(p !== "custom" ? { from: null, to: null } : {}) }); }}
           >
             {PERIOD_LABELS[p]}
           </Button>
@@ -52,7 +56,7 @@ export function JournalFilters({ options }: { options: FilterOptions }) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      <div className={`flex flex-wrap gap-2 ${pending ? "pointer-events-none opacity-60" : ""}`}>
         <SearchSelect
           className="w-48"
           value={vehicleId}

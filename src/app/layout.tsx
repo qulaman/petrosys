@@ -4,6 +4,7 @@ import "./globals.css";
 import { themeInitScript } from "@/lib/theme/theme-script";
 import { ru } from "@/lib/i18n/ru";
 import { Toaster } from "@/components/ui/sonner";
+import { NavProgressProvider } from "@/components/nav-progress";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,7 +43,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-full flex flex-col">
-        {children}
+        <NavProgressProvider>{children}</NavProgressProvider>
         <Toaster />
       </body>
     </html>

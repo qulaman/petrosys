@@ -142,7 +142,7 @@ export function TripJournal({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)}>Отмена</Button>
-            <Button onClick={saveEdit} disabled={pending}>{pending ? "Сохранение…" : "Сохранить"}</Button>
+            <Button onClick={saveEdit} loading={pending}>{pending ? "Сохранение…" : "Сохранить"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -156,7 +156,7 @@ export function TripJournal({
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setToDelete(null)}>Отмена</Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={pending}>Удалить</Button>
+            <Button variant="destructive" onClick={confirmDelete} loading={pending}>Удалить</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

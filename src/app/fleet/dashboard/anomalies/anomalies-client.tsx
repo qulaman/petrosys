@@ -91,7 +91,7 @@ export function AnomaliesClient({ rows }: { rows: AnomalyRow[] }) {
             </Button>
           ))}
         </div>
-        <Button size="sm" variant="secondary" className="ml-auto" disabled={pending} onClick={() => act(recomputeAction)}>
+        <Button size="sm" variant="secondary" className="ml-auto" loading={pending} onClick={() => act(recomputeAction)}>
           <RefreshCw className="size-4" /> Пересчитать сейчас
         </Button>
       </div>
@@ -157,7 +157,7 @@ export function AnomaliesClient({ rows }: { rows: AnomalyRow[] }) {
                   <label className="text-xs">Основание</label>
                   <Input value={reason} onChange={(e) => setReason(e.target.value)} className="h-9" placeholder="Превышение норматива расхода ГСМ" />
                 </div>
-                <Button size="sm" disabled={pending} onClick={() => submitPenalty(a.id)}>Удержать</Button>
+                <Button size="sm" loading={pending} onClick={() => submitPenalty(a.id)}>Удержать</Button>
               </div>
             ) : null}
           </div>
