@@ -21,6 +21,8 @@ export function ShiftJournal({
   isAdmin?: boolean;
 }) {
   const router = useRouter();
+  const [shownCount, setShownCount] = useState(100);
+  const shown = rows.slice(0, shownCount);
   const totalHours = rows.reduce((s, r) => s + r.hours, 0);
   const [pending, start] = useTransition();
   const [toDelete, setToDelete] = useState<ShiftJournalRow | null>(null);
@@ -72,7 +74,7 @@ export function ShiftJournal({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {rows.map((r) => (
+            {shown.map((r) => (
               <tr key={r.id}>
                 <td className="whitespace-nowrap px-3 py-2">{r.date}</td>
                 <td className="px-3 py-2">{r.shift === "day" ? "День" : "Ночь"}</td>
@@ -101,6 +103,11 @@ export function ShiftJournal({
           </tbody>
         </table>
       </div>
+      {rows.length > shownCount ? (
+        <Button variant="outline" size="sm" className="self-center" onClick={() => setShownCount((n) => n + 200)}>
+          Показать ещё ({rows.length - shownCount})
+        </Button>
+      ) : null}
 
       {isAdmin ? (
         <p className="text-xs text-muted-foreground">

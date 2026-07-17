@@ -26,6 +26,8 @@ export function FuelJournal({
   drivers?: { id: string; full_name: string }[];
 }) {
   const router = useRouter();
+  const [shownCount, setShownCount] = useState(100);
+  const shown = rows.slice(0, shownCount);
   const total = rows.reduce((s, r) => s + r.liters, 0);
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<FuelJournalRow | null>(null);
@@ -104,7 +106,7 @@ export function FuelJournal({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {rows.map((r) => (
+            {shown.map((r) => (
               <tr key={r.id}>
                 <td className="whitespace-nowrap px-3 py-2">{fmtDateTime(r.at)}</td>
                 <td className="px-3 py-2 font-medium">{r.reg}</td>
@@ -130,6 +132,11 @@ export function FuelJournal({
           </tbody>
         </table>
       </div>
+      {rows.length > shownCount ? (
+        <Button variant="outline" size="sm" className="self-center" onClick={() => setShownCount((n) => n + 200)}>
+          Показать ещё ({rows.length - shownCount})
+        </Button>
+      ) : null}
 
       {/* Правка (admin) */}
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>

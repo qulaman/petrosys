@@ -127,6 +127,21 @@
   --chart-ok: #3987e5;
 }
 
+/* Режим «солнце»: максимальный контраст для работы под ярким солнцем. */
+.sun {
+  --background: #ffffff;
+  --foreground: #000000;
+  --muted-foreground: #1f1f1f;
+  --border: #444444;
+  --input: #444444;
+  --card-foreground: #000000;
+  --secondary-foreground: #000000;
+  --accent-foreground: #000000;
+}
+.sun body {
+  font-weight: 500;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

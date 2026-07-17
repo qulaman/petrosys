@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun, SunDim } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   THEME_STORAGE_KEY,
@@ -10,17 +10,19 @@ import {
 } from "@/lib/theme/theme-script";
 import { ru } from "@/lib/i18n/ru";
 
-const ORDER: ThemeMode[] = ["auto", "light", "dark"];
-const ICON = { auto: Monitor, light: Sun, dark: Moon };
+const ORDER: ThemeMode[] = ["auto", "light", "dark", "sun"];
+const ICON = { auto: Monitor, light: SunDim, dark: Moon, sun: Sun };
 const LABEL = {
   auto: ru.theme.auto,
   light: ru.theme.light,
   dark: ru.theme.dark,
+  sun: "Солнце",
 };
 
 function apply(mode: ThemeMode) {
   const isDark = resolveIsDark(mode, new Date().getHours());
   document.documentElement.classList.toggle("dark", isDark);
+  document.documentElement.classList.toggle("sun", mode === "sun");
 }
 
 /**

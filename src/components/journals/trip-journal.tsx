@@ -26,6 +26,8 @@ export function TripJournal({
   routes?: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const [shownCount, setShownCount] = useState(100);
+  const shown = rows.slice(0, shownCount);
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<TripJournalRow | null>(null);
   const [toDelete, setToDelete] = useState<TripJournalRow | null>(null);
@@ -91,7 +93,7 @@ export function TripJournal({
             </tr>
           </thead>
           <tbody className="divide-y">
-            {rows.map((r) => (
+            {shown.map((r) => (
               <tr key={r.id}>
                 <td className="whitespace-nowrap px-3 py-2">{fmtDateTime(r.at)}</td>
                 <td className="px-3 py-2 font-medium">{r.reg}</td>
@@ -115,6 +117,11 @@ export function TripJournal({
           </tbody>
         </table>
       </div>
+      {rows.length > shownCount ? (
+        <Button variant="outline" size="sm" className="self-center" onClick={() => setShownCount((n) => n + 200)}>
+          Показать ещё ({rows.length - shownCount})
+        </Button>
+      ) : null}
 
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="sm:max-w-sm">
