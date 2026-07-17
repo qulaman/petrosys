@@ -25,6 +25,20 @@ export interface TankerBalanceRow {
   stale: boolean; // > 7 дней без замера
 }
 
+export interface AttentionItem {
+  id: string;
+  type: string;
+  detected_at: string;
+  reg: string | null;
+}
+export interface GeoPoint {
+  kind: "fuel" | "trip";
+  reg: string;
+  at: string;
+  lat: number;
+  lng: number;
+}
+
 export interface TodayData {
   orgId: string;
   date: string;
@@ -34,6 +48,10 @@ export interface TodayData {
   hoursToday: number;
   litersCard: number;
   litersTanker: number;
+  /** Вчерашние значения для Δ. */
+  prev: { trips: number; hours: number; liters: number };
+  attention: AttentionItem[];
+  geoPoints: GeoPoint[];
   recentEvents: FeedEvent[];
   tankerBalances: TankerBalanceRow[];
   newAnomalies: number;
@@ -46,14 +64,24 @@ export async function loadTodayData(): Promise<TodayData> {
   const orgId = current?.profile?.org_id ?? "";
   const period = resolvePeriod({ period: "today" });
 
+  // Вчера — для Δ на плитках.
+  const prevDate = new Date(`${period.fromDate}T00:00:00Z`);
+  prevDate.setUTCDate(prevDate.getUTCDate() - 1);
+  const prevFromDate = prevDate.toISOString().slice(0, 10);
+  const prevFromISO = `${prevFromDate}T00:00:00+05:00`;
+
   const supabase = await createClient();
-  const [veh, drv, fuel, trips, shifts, anomalies] = await Promise.all([
+  const [veh, drv, fuel, trips, shifts, anomalies, prevFuel, prevTrips, prevShifts, attentionRes] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, is_active"),
     supabase.from("drivers").select("id, full_name"),
-    supabase.from("fuel_issues").select("id, created_at, liters, source_type, vehicle_id, driver_id").gte("created_at", period.fromISO).lt("created_at", period.toISO),
-    supabase.from("trip_records").select("id, created_at, vehicle_id, driver_id").gte("created_at", period.fromISO).lt("created_at", period.toISO),
+    supabase.from("fuel_issues").select("id, created_at, liters, source_type, vehicle_id, driver_id, geo_lat, geo_lng").gte("created_at", period.fromISO).lt("created_at", period.toISO),
+    supabase.from("trip_records").select("id, created_at, vehicle_id, driver_id, geo_lat, geo_lng").gte("created_at", period.fromISO).lt("created_at", period.toISO),
     supabase.from("shift_records").select("id, created_at, vehicle_id, driver_id, hours").eq("shift_date", period.fromDate),
     supabase.from("anomalies").select("id", { count: "exact", head: true }).eq("status", "new"),
+    supabase.from("fuel_issues").select("liters").gte("created_at", prevFromISO).lt("created_at", period.fromISO),
+    supabase.from("trip_records").select("id", { count: "exact", head: true }).gte("created_at", prevFromISO).lt("created_at", period.fromISO),
+    supabase.from("shift_records").select("hours").eq("shift_date", prevFromDate),
+    supabase.from("anomalies").select("id, type, detected_at, entity_refs").eq("status", "new").order("detected_at", { ascending: false }).limit(5),
   ]);
 
   const vehicleNames: Record<string, string> = {};
@@ -109,6 +137,36 @@ export async function loadTodayData(): Promise<TodayData> {
       stale: !b.last_measured_at || now - new Date(b.last_measured_at).getTime() > 7 * 864e5,
     }));
 
+  // Δ ко вчера
+  const prev = {
+    trips: prevTrips.count ?? 0,
+    hours: (prevShifts.data ?? []).reduce((s, r) => s + Number(r.hours), 0),
+    liters: (prevFuel.data ?? []).reduce((s, r) => s + Number(r.liters), 0),
+  };
+
+  // «Требует внимания» — свежие аномалии с привязкой к машине.
+  const attention: AttentionItem[] = (attentionRes.data ?? []).map((a) => {
+    const refs = (a.entity_refs ?? {}) as { vehicle_id?: string };
+    return {
+      id: a.id,
+      type: a.type,
+      detected_at: a.detected_at,
+      reg: refs.vehicle_id ? vehicleNames[refs.vehicle_id] ?? null : null,
+    };
+  });
+
+  // Последние гео-точки записей (учёт идёт по всему объекту).
+  const geoPoints: GeoPoint[] = [
+    ...fuelRows.filter((r) => r.geo_lat != null && r.geo_lng != null).map((r) => ({
+      kind: "fuel" as const, reg: vehicleNames[r.vehicle_id] ?? "—", at: r.created_at,
+      lat: Number(r.geo_lat), lng: Number(r.geo_lng),
+    })),
+    ...tripRows.filter((r) => r.geo_lat != null && r.geo_lng != null).map((r) => ({
+      kind: "trip" as const, reg: vehicleNames[r.vehicle_id] ?? "—", at: r.created_at,
+      lat: Number(r.geo_lat), lng: Number(r.geo_lng),
+    })),
+  ].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 5);
+
   return {
     orgId,
     date: period.fromDate,
@@ -118,6 +176,9 @@ export async function loadTodayData(): Promise<TodayData> {
     hoursToday,
     litersCard,
     litersTanker,
+    prev,
+    attention,
+    geoPoints,
     recentEvents: events,
     tankerBalances,
     newAnomalies: anomalies.count ?? 0,
@@ -139,6 +200,7 @@ export interface NormRow {
   over: boolean;
 }
 export interface TopConsumer {
+  vehicle_id: string;
   reg: string;
   liters: number;
 }
@@ -204,7 +266,7 @@ export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabDa
 
   // 3) топ потребителей
   const top: TopConsumer[] = [...litersByVeh.entries()]
-    .map(([id, liters]) => ({ reg: vMap.get(id)?.reg_number ?? "—", liters }))
+    .map(([id, liters]) => ({ vehicle_id: id, reg: vMap.get(id)?.reg_number ?? "—", liters }))
     .sort((a, b) => b.liters - a.liters)
     .slice(0, 10);
 
@@ -214,10 +276,18 @@ export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabDa
 // =============================== ВКЛАДКА «РАБОТА» ===============================
 export interface HeatCell { value: number }
 export interface HeatRow { reg: string; type: "hours" | "trips"; cells: number[] }
+export interface IntervalBucket { label: string; count: number }
+export interface ProductivityRow { reg: string; avgPerDay: number }
 export interface WorkTabData {
   days: string[]; // dd.mm
   rows: HeatRow[];
   maxCell: number;
+  /** Гистограмма интервалов между рейсами (все самосвалы), минуты. */
+  intervalBuckets: IntervalBucket[];
+  intervalMedian: number | null;
+  /** Выработка самосвалов: рейсов в день против медианы парка. */
+  productivity: ProductivityRow[];
+  productivityMedian: number | null;
 }
 
 export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabData> {
@@ -255,7 +325,50 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
     return { reg: v.reg_number, type: v.accounting_type as "hours" | "trips", cells };
   });
 
-  return { days: days.map((d) => `${d.slice(8, 10)}.${d.slice(5, 7)}`), rows, maxCell: Math.max(1, maxCell) };
+  // Интервалы между рейсами: сортируем ходки каждой машины по дню, разницы в минутах.
+  const tripsByVehDay = new Map<string, number[]>();
+  for (const t of trips.data ?? []) {
+    const k = `${t.vehicle_id}|${aqtobeDate(t.created_at)}`;
+    (tripsByVehDay.get(k) ?? tripsByVehDay.set(k, []).get(k))!.push(new Date(t.created_at).getTime());
+  }
+  const intervals: number[] = [];
+  for (const times of tripsByVehDay.values()) {
+    times.sort((a, b) => a - b);
+    for (let i = 1; i < times.length; i++) intervals.push(Math.round((times[i] - times[i - 1]) / 60000));
+  }
+  const BUCKETS: [string, (m: number) => boolean][] = [
+    ["<15", (m) => m < 15], ["15–30", (m) => m >= 15 && m < 30], ["30–45", (m) => m >= 30 && m < 45],
+    ["45–60", (m) => m >= 45 && m < 60], ["60–90", (m) => m >= 60 && m < 90], ["90–120", (m) => m >= 90 && m < 120],
+    [">120", (m) => m >= 120],
+  ];
+  const intervalBuckets: IntervalBucket[] = BUCKETS.map(([label, fn]) => ({
+    label, count: intervals.filter(fn).length,
+  }));
+  const sortedIntervals = [...intervals].sort((a, b) => a - b);
+  const intervalMedian = sortedIntervals.length ? sortedIntervals[Math.floor(sortedIntervals.length / 2)] : null;
+
+  // Выработка самосвалов: среднее рейсов за активный день; медиана по парку.
+  const productivity: ProductivityRow[] = (veh.data ?? [])
+    .filter((v) => v.accounting_type === "trips")
+    .map((v) => {
+      const perDay = days.map((d) => tripCount.get(`${v.id}|${d}`) ?? 0).filter((n) => n > 0);
+      const avg = perDay.length ? Math.round((perDay.reduce((s, n) => s + n, 0) / perDay.length) * 10) / 10 : 0;
+      return { reg: v.reg_number, avgPerDay: avg };
+    })
+    .filter((p) => p.avgPerDay > 0)
+    .sort((a, b) => b.avgPerDay - a.avgPerDay);
+  const sortedProd = productivity.map((p) => p.avgPerDay).sort((a, b) => a - b);
+  const productivityMedian = sortedProd.length ? sortedProd[Math.floor(sortedProd.length / 2)] : null;
+
+  return {
+    days: days.map((d) => `${d.slice(8, 10)}.${d.slice(5, 7)}`),
+    rows,
+    maxCell: Math.max(1, maxCell),
+    intervalBuckets,
+    intervalMedian,
+    productivity,
+    productivityMedian,
+  };
 }
 
 // =========================== ВКЛАДКА «ПОДРЯДЧИКИ И ДЕНЬГИ» ===========================
@@ -268,6 +381,13 @@ export interface ContractMoney {
   penalty: number;
   net: number;
   forecast: number;
+  tripsCount: number;
+  hoursSum: number;
+  /** Эффективная стоимость: net/рейс и net/час (сравнение подрядчиков). */
+  costPerTrip: number | null;
+  costPerHour: number | null;
+  /** Тенге за м³ перевезённого грунта (объём — из маршрута). */
+  tengePerM3: number | null;
 }
 export interface MoneyTabData {
   contracts: ContractMoney[];
@@ -298,11 +418,13 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
       supabase.from("vehicles").select("id, vehicle_type, contract_id"),
       supabase.from("price_list").select("contract_id, unit, vehicle_type, vehicle_id, price, valid_from"),
       supabase.from("contract_fuel_prices").select("contract_id, price_per_liter, valid_from"),
-      supabase.from("trip_records").select("vehicle_id, created_at").gte("created_at", period.fromISO).lt("created_at", period.toISO),
+      supabase.from("trip_records").select("vehicle_id, created_at, route_id").gte("created_at", period.fromISO).lt("created_at", period.toISO),
       supabase.from("shift_records").select("vehicle_id, hours, shift_date, journal_id").gte("shift_date", period.fromDate).lte("shift_date", period.toDate),
       supabase.from("fuel_issues").select("vehicle_id, liters, created_at").gte("created_at", period.fromISO).lt("created_at", period.toISO),
       supabase.from("penalties").select("contract_id, amount").is("settled_in_period", null),
     ]);
+  const { data: routesData } = await supabase.from("routes").select("id, volume_m3");
+  const routeVolume = new Map((routesData ?? []).map((r) => [r.id, r.volume_m3 == null ? null : Number(r.volume_m3)]));
 
   // Волна 2 — статусы журналов смен (оплачиваются только закрытые).
   const journalIds = [...new Set((shiftsRes.data ?? []).map((s) => s.journal_id).filter((x): x is string => !!x))];
@@ -328,25 +450,30 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
   }
 
   // Агрегация начислений/удержаний по договорам одним проходом.
-  const acc = new Map<string, { accrual: number; fuelHold: number; penalty: number }>();
+  const acc = new Map<string, { accrual: number; fuelHold: number; penalty: number; trips: number; hours: number; volume: number }>();
   const bucket = (cid: string) => {
     let b = acc.get(cid);
-    if (!b) { b = { accrual: 0, fuelHold: 0, penalty: 0 }; acc.set(cid, b); }
+    if (!b) { b = { accrual: 0, fuelHold: 0, penalty: 0, trips: 0, hours: 0, volume: 0 }; acc.set(cid, b); }
     return b;
   };
 
   for (const t of tripsRes.data ?? []) {
     const v = vehById.get(t.vehicle_id);
     if (!v?.contract_id) continue;
+    const b = bucket(v.contract_id);
+    b.trips += 1;
+    b.volume += routeVolume.get(t.route_id) ?? 0;
     const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "trip", v.id, v.vehicle_type, aqtobeDate(t.created_at));
-    if (rate != null) bucket(v.contract_id).accrual += rate;
+    if (rate != null) b.accrual += rate;
   }
   for (const s of shiftsRes.data ?? []) {
     if (s.journal_id && !closedJournals.has(s.journal_id)) continue; // черновики не оплачиваются
     const v = vehById.get(s.vehicle_id);
     if (!v?.contract_id) continue;
+    const b = bucket(v.contract_id);
+    b.hours += Number(s.hours);
     const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "hour", v.id, v.vehicle_type, s.shift_date);
-    if (rate != null) bucket(v.contract_id).accrual += rate * Number(s.hours);
+    if (rate != null) b.accrual += rate * Number(s.hours);
   }
   for (const f of fuelRes.data ?? []) {
     const v = vehById.get(f.vehicle_id);
@@ -362,7 +489,7 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
   }
 
   const contracts: ContractMoney[] = (contractsRes.data ?? []).map((c) => {
-    const b = acc.get(c.id) ?? { accrual: 0, fuelHold: 0, penalty: 0 };
+    const b = acc.get(c.id) ?? { accrual: 0, fuelHold: 0, penalty: 0, trips: 0, hours: 0, volume: 0 };
     const accrual = Math.round(b.accrual * 100) / 100;
     const fuelHold = Math.round(b.fuelHold * 100) / 100;
     const penalty = Math.round(b.penalty * 100) / 100;
@@ -376,6 +503,11 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
       penalty,
       net,
       forecast: Math.round((net / elapsed) * totalDays),
+      tripsCount: b.trips,
+      hoursSum: b.hours,
+      costPerTrip: b.trips > 0 ? Math.round(net / b.trips) : null,
+      costPerHour: b.hours > 0 ? Math.round(net / b.hours) : null,
+      tengePerM3: b.volume > 0 ? Math.round(net / b.volume) : null,
     };
   });
   contracts.sort((a, b) => a.number.localeCompare(b.number, "ru"));

@@ -92,13 +92,18 @@ export function FuelTab({ data }: { data: FuelTabData }) {
           <h3 className="text-sm font-medium">Топ потребителей топлива</h3>
           <div className="flex flex-col gap-2 rounded-lg border p-4">
             {data.top.map((t) => (
-              <div key={t.reg} className="flex items-center gap-3">
+              <a
+                key={t.reg}
+                href={`/fleet/journals/fuel?vehicle=${t.vehicle_id}`}
+                className="flex items-center gap-3 rounded px-1 hover:bg-accent"
+                title="Открыть журнал выдач этой машины"
+              >
                 <span className="w-24 shrink-0 text-sm font-medium">{t.reg}</span>
                 <div className="h-3 flex-1 rounded bg-muted">
                   <div className="h-full rounded" style={{ width: `${(t.liters / maxTop) * 100}%`, background: "var(--chart-card)" }} />
                 </div>
                 <span className="w-20 shrink-0 text-right text-sm tabular-nums">{fmtLiters(t.liters)}</span>
-              </div>
+              </a>
             ))}
             {data.top.length === 0 ? <p className="text-sm text-muted-foreground">Выдач за период нет</p> : null}
           </div>

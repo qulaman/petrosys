@@ -18,6 +18,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: `${ru.app.name} — ${ru.app.tagline}`,
   description: "Система учёта работы техники и ГСМ на карьере",
+  appleWebApp: { capable: true, title: "QuarryOps", statusBarStyle: "default" },
+  icons: { apple: "/icon-192.png" },
+};
+
+export const viewport = {
+  themeColor: "#c2410c",
 };
 
 export default function RootLayout({

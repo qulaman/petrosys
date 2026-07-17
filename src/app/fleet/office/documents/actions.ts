@@ -11,6 +11,22 @@ import {
   amendmentDocx, appendix2Docx, buildAvrXlsx, buildFuelStatementXlsx,
   buildTripRegisterXlsx, claimDocx, downtimeActDocx,
 } from "@/lib/documents/builders";
+import { getActiveTemplate, renderTemplate } from "@/lib/documents/render";
+
+/** Пытается отрендерить загруженный шаблон типа документа; null → встроенная форма. */
+async function tryTemplate(
+  docType: string,
+  data: Record<string, unknown>,
+): Promise<Buffer | null> {
+  const tpl = await getActiveTemplate(docType);
+  if (!tpl) return null;
+  const r = renderTemplate(tpl.buffer, data);
+  if (!r.ok) {
+    devError(`template/${docType}`, r.error);
+    return null;
+  }
+  return r.buffer;
+}
 import { aqtobeDate } from "@/lib/tz";
 import { fmtDateTime } from "@/lib/format";
 import { devError } from "@/lib/dev-log";
@@ -192,16 +208,27 @@ export async function generateAmendment(
     const { data: contractor } = await supabase.from("contractors").select("name").eq("id", contractRes.data.contractor_id).single();
     const vMap = new Map((vehiclesRes.data ?? []).map((v) => [v.id, v.reg_number]));
 
-    const buf = amendmentDocx({
-      contractNumber: contractRes.data.number,
-      contractorName: contractor?.name ?? "—",
-      validFrom,
-      rates: (pricesRes.data ?? []).map((r) => ({
-        vehicle_type: r.vehicle_type, unit: r.unit, price: Number(r.price),
-        vehicle_reg: r.vehicle_id ? vMap.get(r.vehicle_id) ?? null : null, valid_from: validFrom,
-      })),
-      fuelPrices: (fuelRes.data ?? []).map((f) => ({ price_per_liter: Number(f.price_per_liter) })),
-    });
+    const rates = (pricesRes.data ?? []).map((r) => ({
+      vehicle_type: r.vehicle_type, unit: r.unit, price: Number(r.price),
+      vehicle_reg: r.vehicle_id ? vMap.get(r.vehicle_id) ?? null : null, valid_from: validFrom,
+    }));
+    const fuelPrices = (fuelRes.data ?? []).map((f) => ({ price_per_liter: Number(f.price_per_liter) }));
+
+    const buf =
+      (await tryTemplate("amendment", {
+        number: contractRes.data.number,
+        c_name: contractor?.name ?? "—",
+        valid_from: validFrom,
+        rates: rates.map((r) => ({ r_type: r.vehicle_type, r_unit: r.unit, r_price: String(r.price) })),
+        fuel_price: fuelPrices[0] ? String(fuelPrices[0].price_per_liter) : "",
+      })) ??
+      amendmentDocx({
+        contractNumber: contractRes.data.number,
+        contractorName: contractor?.name ?? "—",
+        validFrom,
+        rates,
+        fuelPrices,
+      });
     const res = await saveGeneratedDocument({
       orgId: gate.orgId, contractId, docType: "amendment", buffer: buf, ext: "docx",
       sourceRefs: { valid_from: validFrom },
@@ -246,12 +273,22 @@ export async function generateClaim(anomalyId: string): Promise<Result> {
     const actual = Number(refs.actual ?? (hours > 0 ? liters / hours : 0));
     const overLiters = Math.max(0, liters - norm * hours);
 
-    const buf = claimDocx({
-      contractNumber: contractRes.data?.number ?? "—",
-      contractorName: contractor?.name ?? "—",
-      reg: v.reg_number, month: refs.month, actual, norm, hours, liters, overLiters,
-      pricePerLiter: priceRes.data?.[0] ? Number(priceRes.data[0].price_per_liter) : null,
-    });
+    const pricePerLiter = priceRes.data?.[0] ? Number(priceRes.data[0].price_per_liter) : null;
+    const buf =
+      (await tryTemplate("claim_overconsumption", {
+        number: contractRes.data?.number ?? "—",
+        c_name: contractor?.name ?? "—",
+        reg: v.reg_number, month: refs.month,
+        actual: String(actual), norm: String(norm), hours: String(hours), liters: String(liters),
+        over_liters: String(Math.round(overLiters * 10) / 10),
+        amount: pricePerLiter != null ? String(Math.round(overLiters * pricePerLiter)) : "",
+      })) ??
+      claimDocx({
+        contractNumber: contractRes.data?.number ?? "—",
+        contractorName: contractor?.name ?? "—",
+        reg: v.reg_number, month: refs.month, actual, norm, hours, liters, overLiters,
+        pricePerLiter,
+      });
     const res = await saveGeneratedDocument({
       orgId: gate.orgId, contractId: v.contract_id, docType: "claim_overconsumption",
       buffer: buf, ext: "docx", periodFrom: monthStart,
@@ -298,13 +335,24 @@ export async function generateDowntimeAct(recordId: string): Promise<Result> {
       }
     }
 
-    const buf = downtimeActDocx({
-      contractNumber: c?.number ?? null, reg: v?.reg_number ?? "—",
-      date: r.downtime_date, faultSide: r.fault_side, reason: r.reason,
-      hours: r.hours == null ? null : Number(r.hours),
-      notifiedAt: r.notified_at ? fmtDateTime(r.notified_at) : null,
-      compensable,
-    });
+    const buf =
+      (await tryTemplate("downtime_act", {
+        number: c?.number ?? "",
+        reg: v?.reg_number ?? "—",
+        date: r.downtime_date,
+        fault_side: r.fault_side === "client" ? "Заказчик" : "Исполнитель",
+        reason: r.reason,
+        hours: r.hours == null ? "" : String(r.hours),
+        notified_at: r.notified_at ? fmtDateTime(r.notified_at) : "",
+        compensation: compensable ? "подлежит компенсации 20% дневной ставки" : "компенсация не начисляется",
+      })) ??
+      downtimeActDocx({
+        contractNumber: c?.number ?? null, reg: v?.reg_number ?? "—",
+        date: r.downtime_date, faultSide: r.fault_side, reason: r.reason,
+        hours: r.hours == null ? null : Number(r.hours),
+        notifiedAt: r.notified_at ? fmtDateTime(r.notified_at) : null,
+        compensable,
+      });
     if (!contractId) return { ok: false, error: "У машины не задан договор — акт не к чему привязать" };
     const res = await saveGeneratedDocument({
       orgId: gate.orgId, contractId, docType: "downtime_act", buffer: buf, ext: "docx",

@@ -1,27 +1,43 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Droplet, Fuel, Radio, Timer, Truck } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, Droplet, Fuel, MapPin, Radio, Timer, Truck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { fmtInt, fmtLiters, fmtTime } from "@/lib/format";
+import { ANOMALY_LABELS } from "@/lib/anomalies";
 import { cn } from "@/lib/utils";
 import type { FeedEvent, TodayData } from "@/lib/data/dashboard";
 
+/** Δ к вчера: стрелка и знак; серым при нуле. */
+function Delta({ now, prev }: { now: number; prev: number }) {
+  const diff = now - prev;
+  if (prev === 0 && now === 0) return null;
+  return (
+    <span className={cn("text-xs tabular-nums", diff > 0 ? "text-green-600" : diff < 0 ? "text-destructive" : "text-muted-foreground")}>
+      {diff > 0 ? "▲" : diff < 0 ? "▼" : "•"} {diff > 0 ? "+" : ""}{fmtInt(diff)} ко вчера
+    </span>
+  );
+}
+
 function StatTile({
-  label, value, sub, icon: Icon,
+  label, value, sub, icon: Icon, href, delta,
 }: {
   label: string; value: string; sub?: string; icon: React.ElementType;
+  href?: string; delta?: React.ReactNode;
 }) {
-  return (
-    <div className="flex flex-col gap-1 rounded-lg border p-4">
+  const body = (
+    <div className={cn("flex flex-col gap-1 rounded-lg border p-4", href ? "transition-colors hover:bg-accent" : "")}>
       <div className="flex items-center gap-2 text-muted-foreground">
         <Icon className="size-4" />
         <span className="text-xs">{label}</span>
       </div>
       <span className="text-3xl font-bold tabular-nums">{value}</span>
+      {delta}
       {sub ? <span className="text-xs text-muted-foreground">{sub}</span> : null}
     </div>
   );
+  return href ? <Link href={href}>{body}</Link> : body;
 }
 
 const KIND_LABEL: Record<FeedEvent["kind"], string> = {
@@ -68,10 +84,32 @@ export function TodayTab({ data }: { data: TodayData }) {
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Техника на линии" value={`${data.techOnline}/${data.techTotal}`} icon={Truck} sub="с записью сегодня" />
-        <StatTile label="Рейсов сегодня" value={fmtInt(data.tripsToday)} icon={Truck} />
-        <StatTile label="Часов записано" value={fmtInt(data.hoursToday)} icon={Timer} />
-        <StatTile label="Литров выдано" value={fmtInt(data.litersCard + data.litersTanker)} icon={Fuel} sub={`карта ${fmtInt(data.litersCard)} · бензовоз ${fmtInt(data.litersTanker)}`} />
+        <StatTile label="Рейсов сегодня" value={fmtInt(data.tripsToday)} icon={Truck}
+          href="/fleet/journals/trips?period=today" delta={<Delta now={data.tripsToday} prev={data.prev.trips} />} />
+        <StatTile label="Часов записано" value={fmtInt(data.hoursToday)} icon={Timer}
+          href="/fleet/journals/shifts?period=today" delta={<Delta now={data.hoursToday} prev={data.prev.hours} />} />
+        <StatTile label="Литров выдано" value={fmtInt(data.litersCard + data.litersTanker)} icon={Fuel}
+          href="/fleet/journals/fuel?period=today"
+          delta={<Delta now={data.litersCard + data.litersTanker} prev={data.prev.liters} />}
+          sub={`карта ${fmtInt(data.litersCard)} · бензовоз ${fmtInt(data.litersTanker)}`} />
       </div>
+
+      {/* Требует внимания */}
+      {data.attention.length ? (
+        <section className="flex flex-col gap-2">
+          <p className="text-sm font-medium">Требует внимания</p>
+          <div className="flex flex-col divide-y rounded-lg border border-amber-500/40">
+            {data.attention.map((a) => (
+              <Link key={a.id} href="/fleet/dashboard/anomalies" className="flex items-center gap-2 p-3 text-sm hover:bg-accent">
+                <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                <span className="font-medium">{ANOMALY_LABELS[a.type] ?? a.type}</span>
+                {a.reg ? <span className="text-muted-foreground">· {a.reg}</span> : null}
+                <span className="ml-auto text-xs text-muted-foreground">{fmtTime(a.detected_at)}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {data.tankerBalances.length ? (
         <section className="flex flex-col gap-2">
@@ -115,6 +153,31 @@ export function TodayTab({ data }: { data: TodayData }) {
           {events.length === 0 ? <p className="p-3 text-sm text-muted-foreground">Событий сегодня пока нет</p> : null}
         </div>
       </section>
+
+      {/* Гео-точки записей — учёт идёт по всему объекту */}
+      {data.geoPoints.length ? (
+        <section className="flex flex-col gap-2">
+          <p className="text-sm font-medium">Последние гео-точки записей</p>
+          <div className="flex flex-col divide-y rounded-lg border">
+            {data.geoPoints.map((g, i) => (
+              <a
+                key={i}
+                href={`https://maps.google.com/?q=${g.lat},${g.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 p-3 text-sm hover:bg-accent"
+              >
+                <MapPin className="size-4 shrink-0 text-muted-foreground" />
+                <span className="font-medium">{g.reg}</span>
+                <span className="text-muted-foreground">{g.kind === "fuel" ? "заправка" : "рейс"}</span>
+                <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                  {g.lat.toFixed(5)}, {g.lng.toFixed(5)} · {fmtTime(g.at)}
+                </span>
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
