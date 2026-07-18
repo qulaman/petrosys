@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
@@ -14,13 +15,17 @@ const tooltipStyle = {
 
 /** Активность (часы и рейсы раздельно) + интервалы рейсов + выработка самосвалов. */
 export function WorkTab({ data }: { data: WorkTabData }) {
-  const singleDay = data.days.length === 1;
+  const singleDay = data.days.length === 1 && !data.weekly;
+  // Интервалы: 0 — все самосвалы, дальше по машинам.
+  const [intervalIdx, setIntervalIdx] = useState(0);
+  const intervalGroup = data.intervals[Math.min(intervalIdx, data.intervals.length - 1)] ?? data.intervals[0];
+  const colUnit = data.weekly ? "за неделю" : "за день";
   return (
     <div className="flex flex-col gap-6">
       {/* Моточасы */}
       <section className="flex flex-col gap-3">
         <h3 className="text-sm font-medium">
-          Моточасы <span className="text-muted-foreground">(часов за день · итог за период)</span>
+          Моточасы <span className="text-muted-foreground">(часов {colUnit} · итог за период)</span>
         </h3>
         <HeatTable
           days={data.days}
@@ -29,7 +34,10 @@ export function WorkTab({ data }: { data: WorkTabData }) {
           colorVar="var(--chart-card)"
           emptyText="Нет техники на моточасах"
         />
-        <p className="text-xs text-muted-foreground">Пустые ячейки — простой/нет записей.</p>
+        <p className="text-xs text-muted-foreground">
+          Пустые ячейки — простой/нет записей.
+          {data.weekly ? " Период больше 60 дней — колонки агрегированы по неделям." : ""}
+        </p>
       </section>
 
       {/* Рейсы */}
@@ -37,7 +45,7 @@ export function WorkTab({ data }: { data: WorkTabData }) {
         <h3 className="text-sm font-medium">
           Рейсы самосвалов{" "}
           <span className="text-muted-foreground">
-            {singleDay ? "(накопительно за день)" : "(рейсов за день · итог за период)"}
+            {singleDay ? "(накопительно за день)" : `(рейсов ${colUnit} · итог за период)`}
           </span>
         </h3>
         {singleDay ? (
@@ -69,15 +77,31 @@ export function WorkTab({ data }: { data: WorkTabData }) {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Гистограмма интервалов */}
         <section className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium">
-            Интервалы между рейсами, мин{" "}
-            <span className="text-muted-foreground">
-              {data.intervalMedian != null ? `· медиана ${data.intervalMedian} мин` : ""}
-            </span>
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-medium">
+              Интервалы между рейсами, мин{" "}
+              <span className="text-muted-foreground">
+                {intervalGroup?.median != null ? `· медиана ${intervalGroup.median} мин` : ""}
+              </span>
+            </h3>
+            {data.intervals.length > 1 ? (
+              <select
+                value={intervalIdx}
+                onChange={(e) => setIntervalIdx(Number(e.target.value))}
+                className="rounded-md border bg-background px-2 py-1 text-xs"
+                aria-label="Машина для гистограммы интервалов"
+              >
+                {data.intervals.map((g, i) => (
+                  <option key={g.reg ?? "all"} value={i}>
+                    {g.reg ?? "Все самосвалы"}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
           <div className="h-56 rounded-lg border p-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.intervalBuckets} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <BarChart data={intervalGroup?.buckets ?? []} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
                 <YAxis tick={axisTick} tickLine={false} axisLine={false} width={32} allowDecimals={false} />

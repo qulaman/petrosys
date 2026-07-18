@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 
 export interface JournalFilters {
   fromISO: string;
@@ -64,29 +65,30 @@ export interface FuelJournalRow {
 export async function loadFuelJournal(f: JournalFilters): Promise<FuelJournalRow[]> {
   const supabase = await createClient();
 
-  let q = supabase
-    .from("fuel_issues")
-    .select("id, created_at, liters, source_type, odometer, receipt_photo_url, driver_signature_url, vehicle_id, driver_id, fuel_card_id, tanker_id")
-    .gte("created_at", f.fromISO)
-    .lt("created_at", f.toISO)
-    .order("created_at", { ascending: false })
-    .limit(2000);
-  if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
+  const rowsAll = fetchAll((from, to) => {
+    let q = supabase
+      .from("fuel_issues")
+      .select("id, created_at, liters, source_type, odometer, receipt_photo_url, driver_signature_url, vehicle_id, driver_id, fuel_card_id, tanker_id")
+      .gte("created_at", f.fromISO)
+      .lt("created_at", f.toISO);
+    if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
+    return q.order("created_at", { ascending: false }).order("id").range(from, to);
+  });
 
   // Словари и основная выборка — одной волной; фильтр подрядчика — в JS.
-  const [veh, drv, cards, tankers, rowsRes] = await Promise.all([
+  const [veh, drv, cards, tankers, rows] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, brand, contractor_id"),
     supabase.from("drivers").select("id, full_name"),
     supabase.from("fuel_cards").select("id, card_number"),
     supabase.from("tankers").select("id, name"),
-    q,
+    rowsAll,
   ]);
   const vMap = new Map((veh.data ?? []).map((v) => [v.id, v]));
   const dMap = new Map((drv.data ?? []).map((d) => [d.id, d.full_name]));
   const cMap = new Map((cards.data ?? []).map((c) => [c.id, c.card_number]));
   const tMap = new Map((tankers.data ?? []).map((t) => [t.id, t.name]));
 
-  const data = byContractor(rowsRes.data ?? [], f.contractorId, veh.data ?? []);
+  const data = byContractor(rows, f.contractorId, veh.data ?? []);
   return data.map((r) => {
     const v = vMap.get(r.vehicle_id);
     const src = r.source_type as "card" | "tanker";
@@ -126,26 +128,27 @@ export interface TripJournalRow {
 export async function loadTripJournal(f: JournalFilters): Promise<TripJournalRow[]> {
   const supabase = await createClient();
 
-  let q = supabase
-    .from("trip_records")
-    .select("id, created_at, vehicle_id, driver_id, route_id, driver_signature_url, geo_lat, geo_lng")
-    .gte("created_at", f.fromISO)
-    .lt("created_at", f.toISO)
-    .order("created_at", { ascending: false })
-    .limit(5000);
-  if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
+  const rowsAll = fetchAll((from, to) => {
+    let q = supabase
+      .from("trip_records")
+      .select("id, created_at, vehicle_id, driver_id, route_id, driver_signature_url, geo_lat, geo_lng")
+      .gte("created_at", f.fromISO)
+      .lt("created_at", f.toISO);
+    if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
+    return q.order("created_at", { ascending: false }).order("id").range(from, to);
+  });
 
-  const [veh, drv, routes, rowsRes] = await Promise.all([
+  const [veh, drv, routes, rows] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, contractor_id"),
     supabase.from("drivers").select("id, full_name"),
     supabase.from("routes").select("id, name"),
-    q,
+    rowsAll,
   ]);
   const vMap = new Map((veh.data ?? []).map((v) => [v.id, v]));
   const dMap = new Map((drv.data ?? []).map((d) => [d.id, d.full_name]));
   const rMap = new Map((routes.data ?? []).map((r) => [r.id, r.name]));
 
-  const data = byContractor(rowsRes.data ?? [], f.contractorId, veh.data ?? []);
+  const data = byContractor(rows, f.contractorId, veh.data ?? []);
   return data.map((r) => ({
     id: r.id,
     at: r.created_at,
@@ -175,26 +178,27 @@ export interface ShiftJournalRow {
 export async function loadShiftJournal(f: JournalFilters): Promise<ShiftJournalRow[]> {
   const supabase = await createClient();
 
-  let q = supabase
-    .from("shift_records")
-    .select("id, shift_date, shift_type, hours, vehicle_id, driver_id, work_type_id, driver_signature_url, itr_signature_url")
-    .gte("shift_date", f.fromDate)
-    .lte("shift_date", f.toDate)
-    .order("shift_date", { ascending: false })
-    .limit(5000);
-  if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
+  const rowsAll = fetchAll((from, to) => {
+    let q = supabase
+      .from("shift_records")
+      .select("id, shift_date, shift_type, hours, vehicle_id, driver_id, work_type_id, driver_signature_url, itr_signature_url")
+      .gte("shift_date", f.fromDate)
+      .lte("shift_date", f.toDate);
+    if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
+    return q.order("shift_date", { ascending: false }).order("id").range(from, to);
+  });
 
-  const [veh, drv, wt, rowsRes] = await Promise.all([
+  const [veh, drv, wt, rows] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, contractor_id"),
     supabase.from("drivers").select("id, full_name"),
     supabase.from("work_types").select("id, name"),
-    q,
+    rowsAll,
   ]);
   const vMap = new Map((veh.data ?? []).map((v) => [v.id, v]));
   const dMap = new Map((drv.data ?? []).map((d) => [d.id, d.full_name]));
   const wMap = new Map((wt.data ?? []).map((w) => [w.id, w.name]));
 
-  const data = byContractor(rowsRes.data ?? [], f.contractorId, veh.data ?? []);
+  const data = byContractor(rows, f.contractorId, veh.data ?? []);
   return data.map((r) => ({
     id: r.id,
     date: r.shift_date,

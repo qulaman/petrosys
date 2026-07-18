@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Droplet, Fuel, MapPin, Radio, Timer, Truck } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -9,13 +9,16 @@ import { ANOMALY_LABELS } from "@/lib/anomalies";
 import { cn } from "@/lib/utils";
 import type { FeedEvent, TodayData } from "@/lib/data/dashboard";
 
-/** Δ к вчера: стрелка и знак; серым при нуле. */
+/** Δ ко вчера (к этому же часу): стрелка и знак; серым при нуле. */
 function Delta({ now, prev }: { now: number; prev: number }) {
   const diff = now - prev;
   if (prev === 0 && now === 0) return null;
   return (
-    <span className={cn("text-xs tabular-nums", diff > 0 ? "text-green-600" : diff < 0 ? "text-destructive" : "text-muted-foreground")}>
-      {diff > 0 ? "▲" : diff < 0 ? "▼" : "•"} {diff > 0 ? "+" : ""}{fmtInt(diff)} ко вчера
+    <span
+      className={cn("text-xs tabular-nums", diff > 0 ? "text-green-600" : diff < 0 ? "text-destructive" : "text-muted-foreground")}
+      title="Сравнение со вчерашним днём до этого же часа"
+    >
+      {diff > 0 ? "▲" : diff < 0 ? "▼" : "•"} {diff > 0 ? "+" : ""}{fmtInt(diff)} ко вчера к этому часу
     </span>
   );
 }
@@ -46,52 +49,83 @@ const KIND_LABEL: Record<FeedEvent["kind"], string> = {
   shift: "Смена",
 };
 
+/** Приращения к серверным значениям из realtime-событий (плитки живут вместе с лентой). */
+interface LiveInc {
+  trips: number;
+  hours: number;
+  litersCard: number;
+  litersTanker: number;
+  vehicleIds: string[];
+}
+
 export function TodayTab({ data }: { data: TodayData }) {
   const [events, setEvents] = useState<FeedEvent[]>(data.recentEvents);
   const [live, setLive] = useState(false);
+  const [inc, setInc] = useState<LiveInc>({ trips: 0, hours: 0, litersCard: 0, litersTanker: 0, vehicleIds: [] });
 
   useEffect(() => {
     const supabase = createClient();
-    const vName = (id: string) => data.vehicleNames[id] ?? "—";
+    // Не задваиваем события, уже попавшие в серверную выборку.
+    const seen = new Set(data.recentEvents.map((e) => e.id));
 
     const channel = supabase
       .channel("dashboard-today")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "fuel_issues" }, (p) => {
         const r = p.new as { id: string; created_at: string; liters: number; source_type: string; vehicle_id: string; driver_id: string };
-        pushEvent({ id: r.id, kind: "fuel", at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id, detail: `${Number(r.liters)} л · ${r.source_type === "card" ? "карта" : "бензовоз"}` });
+        if (!push({ id: r.id, kind: "fuel", at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id, detail: `${Number(r.liters)} л · ${r.source_type === "card" ? "карта" : "бензовоз"}` })) return;
+        setInc((s) => ({
+          ...s,
+          litersCard: s.litersCard + (r.source_type === "card" ? Number(r.liters) : 0),
+          litersTanker: s.litersTanker + (r.source_type === "card" ? 0 : Number(r.liters)),
+          vehicleIds: [...s.vehicleIds, r.vehicle_id],
+        }));
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "trip_records" }, (p) => {
         const r = p.new as { id: string; created_at: string; vehicle_id: string; driver_id: string };
-        pushEvent({ id: r.id, kind: "trip", at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id, detail: "рейс" });
+        if (!push({ id: r.id, kind: "trip", at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id, detail: "рейс" })) return;
+        setInc((s) => ({ ...s, trips: s.trips + 1, vehicleIds: [...s.vehicleIds, r.vehicle_id] }));
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "shift_records" }, (p) => {
         const r = p.new as { id: string; created_at: string; vehicle_id: string; driver_id: string; hours: number };
-        pushEvent({ id: r.id, kind: "shift", at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id, detail: `${Number(r.hours)} ч` });
+        if (!push({ id: r.id, kind: "shift", at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id, detail: `${Number(r.hours)} ч` })) return;
+        setInc((s) => ({ ...s, hours: s.hours + Number(r.hours), vehicleIds: [...s.vehicleIds, r.vehicle_id] }));
       })
       .subscribe((status) => setLive(status === "SUBSCRIBED"));
 
-    function pushEvent(e: FeedEvent) {
-      setEvents((prev) => [e, ...prev.filter((x) => x.id !== e.id)].slice(0, 30));
+    /** true — событие новое (лента и плитки обновляются), false — дубль. */
+    function push(e: FeedEvent): boolean {
+      if (seen.has(e.id)) return false;
+      seen.add(e.id);
+      setEvents((prev) => [e, ...prev].slice(0, 30));
+      return true;
     }
 
-    void vName;
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [data.vehicleNames]);
+  }, [data.recentEvents]);
+
+  const techOnline = useMemo(
+    () => new Set([...data.onlineVehicleIds, ...inc.vehicleIds]).size,
+    [data.onlineVehicleIds, inc.vehicleIds],
+  );
+  const tripsToday = data.tripsToday + inc.trips;
+  const hoursToday = data.hoursToday + inc.hours;
+  const litersCard = data.litersCard + inc.litersCard;
+  const litersTanker = data.litersTanker + inc.litersTanker;
 
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Техника на линии" value={`${data.techOnline}/${data.techTotal}`} icon={Truck} sub="с записью сегодня" />
-        <StatTile label="Рейсов сегодня" value={fmtInt(data.tripsToday)} icon={Truck}
-          href="/fleet/journals/trips?period=today" delta={<Delta now={data.tripsToday} prev={data.prev.trips} />} />
-        <StatTile label="Часов записано" value={fmtInt(data.hoursToday)} icon={Timer}
-          href="/fleet/journals/shifts?period=today" delta={<Delta now={data.hoursToday} prev={data.prev.hours} />} />
-        <StatTile label="Литров выдано" value={fmtInt(data.litersCard + data.litersTanker)} icon={Fuel}
+        <StatTile label="Техника на линии" value={`${techOnline}/${data.techTotal}`} icon={Truck} sub="с записью сегодня" />
+        <StatTile label="Рейсов сегодня" value={fmtInt(tripsToday)} icon={Truck}
+          href="/fleet/journals/trips?period=today" delta={<Delta now={tripsToday} prev={data.prev.trips} />} />
+        <StatTile label="Часов записано" value={fmtInt(hoursToday)} icon={Timer}
+          href="/fleet/journals/shifts?period=today" delta={<Delta now={hoursToday} prev={data.prev.hours} />} />
+        <StatTile label="Литров выдано" value={fmtInt(litersCard + litersTanker)} icon={Fuel}
           href="/fleet/journals/fuel?period=today"
-          delta={<Delta now={data.litersCard + data.litersTanker} prev={data.prev.liters} />}
-          sub={`карта ${fmtInt(data.litersCard)} · бензовоз ${fmtInt(data.litersTanker)}`} />
+          delta={<Delta now={litersCard + litersTanker} prev={data.prev.liters} />}
+          sub={`карта ${fmtInt(litersCard)} · бензовоз ${fmtInt(litersTanker)}`} />
       </div>
 
       {/* Требует внимания */}

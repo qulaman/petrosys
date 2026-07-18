@@ -86,6 +86,11 @@
   --chart-tanker: #008300; /* бензовоз — green */
   --chart-over: #d03b3b;   /* превышение нормы — critical */
   --chart-ok: #2a78d6;     /* в норме */
+  /* Категориальные цвета 3–6 (доли подрядчиков и т.п.) */
+  --chart-cat-3: #c25ba0;
+  --chart-cat-4: #b8860b;
+  --chart-cat-5: #0d9488;
+  --chart-cat-6: #d96d33;
 }
 
 .dark {
@@ -125,6 +130,10 @@
   --chart-tanker: #008300;
   --chart-over: #d03b3b;
   --chart-ok: #3987e5;
+  --chart-cat-3: #e87ba4;
+  --chart-cat-4: #d9a520;
+  --chart-cat-5: #2bb8a8;
+  --chart-cat-6: #eb8352;
 }
 
 /* Режим «солнце»: максимальный контраст для работы под ярким солнцем. */

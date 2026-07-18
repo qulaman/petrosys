@@ -24,10 +24,11 @@ function LinkSpinner() {
 
 export function DashboardNav({
   active,
-  newAnomalies,
+  badge,
 }: {
   active: string;
-  newAnomalies: number;
+  /** Счётчик новых аномалий — серверный слот, стримится после первого рендера. */
+  badge?: React.ReactNode;
 }) {
   return (
     <div className="sticky top-[var(--app-sticky-top)] z-30 flex flex-wrap items-center gap-2 border-b bg-background pb-2 pt-1">
@@ -50,11 +51,7 @@ export function DashboardNav({
       >
         <AlertTriangle className="size-4 text-amber-600" />
         Аномалии
-        {newAnomalies > 0 ? (
-          <span className="rounded-full bg-destructive px-1.5 text-xs font-semibold text-white">
-            {newAnomalies}
-          </span>
-        ) : null}
+        {badge}
         <LinkSpinner />
       </Link>
     </div>

@@ -1,7 +1,12 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAll } from "@/lib/supabase/fetch-all";
 import { aqtobeDate } from "@/lib/tz";
 import type { ResolvedPeriod } from "@/lib/journals/period";
+import { loadClosedJournalIds, resolveFuelPrice, resolveRate, type RatePriceRow } from "@/lib/data/money";
+
+// Реэкспорт для существующих импортёров (docx/xlsx-билдеры и т.п.).
+export { resolveRate, type RatePriceRow };
 
 export interface ContractOption {
   id: string;
@@ -68,34 +73,6 @@ export interface Settlement {
   };
 }
 
-export interface RatePriceRow {
-  unit: string;
-  vehicle_type: string;
-  vehicle_id: string | null;
-  price: number;
-  valid_from: string;
-}
-type PriceRow = RatePriceRow;
-
-/** Разрешение ставки: точная (contract, unit, vehicle) → по виду техники; максимальный valid_from ≤ даты. */
-export function resolveRate(
-  prices: PriceRow[],
-  unit: "trip" | "hour",
-  vehicleId: string,
-  vehicleType: string,
-  date: string,
-): number | null {
-  const usable = prices.filter((p) => p.unit === unit && p.valid_from <= date);
-  const exact = usable
-    .filter((p) => p.vehicle_id === vehicleId)
-    .sort((a, b) => (a.valid_from < b.valid_from ? 1 : -1));
-  if (exact.length) return Number(exact[0].price);
-  const byType = usable
-    .filter((p) => p.vehicle_id == null && p.vehicle_type === vehicleType)
-    .sort((a, b) => (a.valid_from < b.valid_from ? 1 : -1));
-  return byType.length ? Number(byType[0].price) : null;
-}
-
 export async function loadSettlement(
   contractId: string,
   period: ResolvedPeriod,
@@ -122,32 +99,25 @@ export async function loadSettlement(
   const vMap = new Map((vehicles ?? []).map((v) => [v.id, v]));
   const noVeh = vehIds.length ? vehIds : ["00000000-0000-0000-0000-000000000000"];
 
-  // Волна 2 — записи периода по машинам договора + контрагент.
-  const [{ data: trips }, { data: shiftsRaw }, { data: fuel }, contractorRes] =
+  // Волна 2 — записи периода по машинам договора (fetchAll — без потолка 1000 строк) + контрагент.
+  const [trips, shiftsRaw, fuel, contractorRes] =
     await Promise.all([
-      supabase.from("trip_records").select("vehicle_id, created_at").in("vehicle_id", noVeh).gte("created_at", period.fromISO).lt("created_at", period.toISO),
-      supabase.from("shift_records").select("vehicle_id, hours, shift_date, journal_id").in("vehicle_id", noVeh).gte("shift_date", period.fromDate).lte("shift_date", period.toDate),
-      supabase.from("fuel_issues").select("vehicle_id, liters, created_at").in("vehicle_id", noVeh).gte("created_at", period.fromISO).lt("created_at", period.toISO),
+      fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at").in("vehicle_id", noVeh).gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
+      fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours, shift_date, journal_id").in("vehicle_id", noVeh).gte("shift_date", period.fromDate).lte("shift_date", period.toDate).order("id").range(f, t)),
+      fetchAll((f, t) => supabase.from("fuel_issues").select("vehicle_id, liters, created_at").in("vehicle_id", noVeh).gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
       supabase.from("contractors").select("name, vat_payer").eq("id", contract.contractor_id).single(),
     ]);
   const contractor = contractorRes.data;
 
   // В расчёт идут только смены из ЗАКРЫТЫХ журналов (черновики не оплачиваются).
   // Записи без журнала (созданные до ввода журналов) считаются для совместимости.
-  const journalIds = [...new Set((shiftsRaw ?? []).map((s) => s.journal_id).filter((x): x is string => !!x))];
-  let closedJournals = new Set<string>();
-  if (journalIds.length) {
-    const { data: js } = await supabase
-      .from("shift_journals")
-      .select("id, status")
-      .in("id", journalIds);
-    closedJournals = new Set((js ?? []).filter((j) => j.status === "closed").map((j) => j.id));
-  }
-  const shifts = (shiftsRaw ?? []).filter(
+  const journalIds = [...new Set(shiftsRaw.map((s) => s.journal_id).filter((x): x is string => !!x))];
+  const closedJournals = await loadClosedJournalIds(supabase, journalIds);
+  const shifts = shiftsRaw.filter(
     (s) => !s.journal_id || closedJournals.has(s.journal_id),
   );
 
-  const priceRows = (prices ?? []) as PriceRow[];
+  const priceRows = (prices ?? []) as RatePriceRow[];
   const fuelPriceRows = (fuelPrices ?? []).map((p) => ({ price: Number(p.price_per_liter), valid_from: p.valid_from }));
 
   // Начисление: группируем по (vehicle, unit, rate)
@@ -171,13 +141,13 @@ export async function loadSettlement(
     accMap.set(k, cur);
   };
 
-  for (const t of trips ?? []) {
+  for (const t of trips) {
     const v = vMap.get(t.vehicle_id);
     if (!v) continue;
     const date = aqtobeDate(t.created_at);
     addAcc(t.vehicle_id, "trip", 1, resolveRate(priceRows, "trip", v.id, v.vehicle_type, date));
   }
-  for (const s of shifts ?? []) {
+  for (const s of shifts) {
     const v = vMap.get(s.vehicle_id);
     if (!v) continue;
     addAcc(s.vehicle_id, "hour", Number(s.hours), resolveRate(priceRows, "hour", v.id, v.vehicle_type, s.shift_date));
@@ -185,12 +155,11 @@ export async function loadSettlement(
 
   // Удержание ГСМ
   const fuelMap = new Map<string, FuelLine>();
-  for (const f of fuel ?? []) {
+  for (const f of fuel) {
     const v = vMap.get(f.vehicle_id);
     const reg = v?.reg_number ?? "—";
     const date = aqtobeDate(f.created_at);
-    const usable = fuelPriceRows.filter((p) => p.valid_from <= date).sort((a, b) => (a.valid_from < b.valid_from ? 1 : -1));
-    const price = usable.length ? usable[0].price : null;
+    const price = resolveFuelPrice(fuelPriceRows, date);
     const cur = fuelMap.get(f.vehicle_id) ?? { reg, liters: 0, amount: 0, priceMissing: price == null };
     cur.liters += Number(f.liters);
     if (price != null) cur.amount = Math.round(cur.liters * price * 100) / 100;
