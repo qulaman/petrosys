@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { QrCode, Users, FileSignature, FileType2 } from "lucide-react";
+import { QrCode, Users, FileSignature, FileType2, SlidersHorizontal } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { ENTITIES, ENTITY_ORDER } from "@/lib/admin/registry";
@@ -37,6 +37,12 @@ export default async function AdminHome() {
           className="flex items-center gap-2 rounded-lg border p-4 font-medium hover:bg-accent"
         >
           <QrCode className="size-5" /> QR-наклейки на технику
+        </Link>
+        <Link
+          href="/fleet/admin/settings"
+          className="flex items-center gap-2 rounded-lg border p-4 font-medium hover:bg-accent"
+        >
+          <SlidersHorizontal className="size-5" /> Настройки детекторов
         </Link>
         {isAdmin ? (
           <Link
