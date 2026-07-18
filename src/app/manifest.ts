@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next";
 /** PWA-манифест: полевые сотрудники ставят приложение на главный экран. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "QuarryOps — учёт техники и ГСМ",
-    short_name: "QuarryOps",
-    description: "Учёт работы техники и ГСМ на карьере",
+    name: "Arlan Ops — West Arlan Group",
+    short_name: "Arlan Ops",
+    description: "Система управления и учёта производства West Arlan Group",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

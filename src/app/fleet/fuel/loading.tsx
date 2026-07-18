@@ -1,8 +1,9 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { BrandLoading } from "@/components/brand/brand-loading";
 
 export default function Loading() {
   return (
-    <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-4">
+    <div className="relative mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-4">
       <Skeleton className="h-8 w-44" />
       <Skeleton className="h-12 w-full" />
       <div className="grid grid-cols-2 gap-2">
@@ -10,6 +11,7 @@ export default function Loading() {
       </div>
       <Skeleton className="h-32 w-full" />
       <Skeleton className="h-14 w-full" />
+      <BrandLoading />
     </div>
   );
 }

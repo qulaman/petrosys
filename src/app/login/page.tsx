@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Logo } from "@/components/brand/logo";
+import { WagMonogram } from "@/components/brand/logo-mark";
 import { LoginForm } from "./login-form";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { homePathForRoles } from "@/lib/auth/roles";
@@ -28,7 +28,10 @@ export default async function LoginPage() {
       <div className="flex flex-1 items-center justify-center px-4 pb-16">
         <Card className="w-full max-w-sm">
           <CardHeader className="items-center text-center">
-            <Logo className="mb-2" />
+            <WagMonogram className="mx-auto mb-2 h-14 w-16 text-primary" />
+            <p className="mb-2 text-xl font-bold tracking-tight">
+              Arlan <span className="text-primary">Ops</span>
+            </p>
             <CardTitle className="text-2xl">{ru.auth.loginTitle}</CardTitle>
             <CardDescription>{ru.auth.loginSubtitle}</CardDescription>
           </CardHeader>

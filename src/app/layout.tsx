@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: `${ru.app.name} — ${ru.app.tagline}`,
-  description: "Система учёта работы техники и ГСМ на карьере",
-  appleWebApp: { capable: true, title: "QuarryOps", statusBarStyle: "default" },
+  description: "Система управления и учёта производства West Arlan Group",
+  appleWebApp: { capable: true, title: "Arlan Ops", statusBarStyle: "default" },
   icons: { apple: "/icon-192.png" },
 };
 

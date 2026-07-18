@@ -4,8 +4,8 @@
  */
 export const ru = {
   app: {
-    name: "QuarryOps",
-    tagline: "Учёт техники и ГСМ",
+    name: "Arlan Ops",
+    tagline: "система управления и учёта производства West Arlan Group",
   },
   common: {
     signIn: "Войти",

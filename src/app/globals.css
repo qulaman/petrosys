@@ -151,6 +151,15 @@
   font-weight: 500;
 }
 
+/* Экраны загрузки: уступы знака Arlan Ops «строятся» снизу вверх. */
+@keyframes brand-band {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+.brand-band {
+  animation: brand-band 1.4s ease-in-out infinite;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
