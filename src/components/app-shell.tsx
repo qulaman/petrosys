@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
+import { BackButton } from "@/components/back-button";
 import { NavBar, TitleIcon, type NavItem } from "@/components/nav-bar";
 import { ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import { ru } from "@/lib/i18n/ru";
@@ -86,6 +87,7 @@ export async function AppShell({
 
       <main className={cn("flex-1 p-4", !isOffice ? "pb-24" : "")}>
         <h1 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+          <BackButton />
           <TitleIcon />
           {title}
         </h1>
