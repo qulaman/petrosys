@@ -566,8 +566,42 @@ export interface ContractMoney {
   /** Тенге за м³ перевезённого грунта (объём — из маршрута). */
   tengePerM3: number | null;
 }
+export interface MoneySummary {
+  accrual: number;
+  fuelHold: number;
+  penalty: number;
+  net: number;
+  forecast: number;
+  elapsedDays: number;
+  totalDays: number;
+}
+/** Накопление начислений нарастающим итогом по дням + линия прогноза. */
+export interface MoneyDailyPoint {
+  label: string; // dd.mm
+  accrued: number | null; // факт нарастающим итогом (null для будущих дней)
+  forecast: number; // линейный прогноз нарастающим итогом
+}
+/** Работа вне расчётов: причина, по которой рейсы/часы не превратились в деньги. */
+export interface UnbilledRow {
+  reg: string;
+  reason: "no_contract" | "no_rate";
+  contractor: string | null;
+  contractId: string | null;
+  contractNumber: string | null;
+  trips: number;
+  hours: number;
+}
+export interface UnbilledSummary {
+  trips: number;
+  hours: number;
+  vehicles: number;
+}
 export interface MoneyTabData {
   contracts: ContractMoney[];
+  summary: MoneySummary;
+  daily: MoneyDailyPoint[];
+  unbilled: UnbilledRow[];
+  unbilledSummary: UnbilledSummary;
 }
 
 function daysBetween(a: string, b: string): number {
@@ -593,7 +627,7 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     await Promise.all([
       supabase.from("contracts").select("id, number, contract_type, contractor_id"),
       supabase.from("contractors").select("id, name, vat_payer"),
-      supabase.from("vehicles").select("id, vehicle_type, contract_id"),
+      supabase.from("vehicles").select("id, reg_number, vehicle_type, contract_id"),
       fetchAll((f, t) => supabase.from("price_list").select("contract_id, unit, vehicle_type, vehicle_id, price, valid_from").order("id").range(f, t)),
       supabase.from("contract_fuel_prices").select("contract_id, price_per_liter, valid_from"),
       fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at, route_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
@@ -609,6 +643,7 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
   const closedJournals = await loadClosedJournalIds(supabase, journalIds);
 
   const contractorById = new Map((contractorsRes.data ?? []).map((c) => [c.id, c]));
+  const contractById = new Map((contractsRes.data ?? []).map((c) => [c.id, c]));
   const vehById = new Map((vehiclesRes.data ?? []).map((v) => [v.id, v]));
   const pricesByContract = new Map<string, RatePriceRow[]>();
   for (const p of prices) {
@@ -631,23 +666,51 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     return b;
   };
 
+  // Работа вне расчётов: нет договора или нет ставки в прайсе → в деньги не попала.
+  const unbilledMap = new Map<string, UnbilledRow>();
+  const unbilled = (v: { id: string; reg_number: string; contract_id: string | null }, reason: "no_contract" | "no_rate") => {
+    let u = unbilledMap.get(v.id);
+    if (!u) {
+      const contract = v.contract_id ? contractById.get(v.contract_id) : null;
+      u = {
+        reg: v.reg_number,
+        reason,
+        contractId: v.contract_id,
+        contractNumber: contract?.number ?? null,
+        contractor: contract ? contractorById.get(contract.contractor_id)?.name ?? null : null,
+        trips: 0,
+        hours: 0,
+      };
+      unbilledMap.set(v.id, u);
+    }
+    return u;
+  };
+  // Накопление начислений по дню события (для графика нарастающим итогом).
+  const accrualByDay = new Map<string, number>();
+  const addDayAccrual = (day: string, amount: number) => accrualByDay.set(day, (accrualByDay.get(day) ?? 0) + amount);
+
   for (const t of trips) {
     const v = vehById.get(t.vehicle_id);
-    if (!v?.contract_id) continue;
+    if (!v) continue;
+    if (!v.contract_id) { unbilled(v, "no_contract").trips += 1; continue; }
     const b = bucket(v.contract_id);
     b.trips += 1;
     b.volume += routeVolume.get(t.route_id) ?? 0;
     const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "trip", v.id, v.vehicle_type, aqtobeDate(t.created_at));
-    if (rate != null) b.accrual += rate;
+    if (rate != null) { b.accrual += rate; addDayAccrual(aqtobeDate(t.created_at), rate); }
+    else unbilled(v, "no_rate").trips += 1;
   }
   for (const s of shiftsRows) {
     if (s.journal_id && !closedJournals.has(s.journal_id)) continue; // черновики не оплачиваются
     const v = vehById.get(s.vehicle_id);
-    if (!v?.contract_id) continue;
+    if (!v) continue;
+    const hours = Number(s.hours);
+    if (!v.contract_id) { unbilled(v, "no_contract").hours += hours; continue; }
     const b = bucket(v.contract_id);
-    b.hours += Number(s.hours);
+    b.hours += hours;
     const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "hour", v.id, v.vehicle_type, s.shift_date);
-    if (rate != null) b.accrual += rate * Number(s.hours);
+    if (rate != null) { b.accrual += rate * hours; addDayAccrual(s.shift_date, rate * hours); }
+    else unbilled(v, "no_rate").hours += hours;
   }
   for (const f of fuelRows) {
     const v = vehById.get(f.vehicle_id);
@@ -683,5 +746,47 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     };
   });
   contracts.sort((a, b) => a.number.localeCompare(b.number, "ru"));
-  return { contracts };
+
+  // Сводка периода.
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const sumAccrual = round2(contracts.reduce((s, c) => s + c.accrual, 0));
+  const sumFuelHold = round2(contracts.reduce((s, c) => s + c.fuelHold, 0));
+  const sumPenalty = round2(contracts.reduce((s, c) => s + c.penalty, 0));
+  const sumNet = round2(sumAccrual - sumFuelHold - sumPenalty);
+  const summary: MoneySummary = {
+    accrual: sumAccrual,
+    fuelHold: sumFuelHold,
+    penalty: sumPenalty,
+    net: sumNet,
+    forecast: Math.round((sumNet / elapsed) * totalDays),
+    elapsedDays: Math.min(elapsed, totalDays),
+    totalDays,
+  };
+
+  // Накопление начислений по дням + линия прогноза (нарастающим итогом).
+  const dailyRate = sumAccrual / elapsed; // средние начисления в день по факту
+  let running = 0;
+  const daily: MoneyDailyPoint[] = eachDay(period.fromDate, period.toDate).map((d, i) => {
+    const dayNo = i + 1;
+    const isPast = dayNo <= elapsed;
+    if (isPast) running += accrualByDay.get(d) ?? 0;
+    return {
+      label: `${d.slice(8, 10)}.${d.slice(5, 7)}`,
+      accrued: isPast ? Math.round(running) : null,
+      forecast: Math.round(dailyRate * dayNo),
+    };
+  });
+
+  // Вне расчётов: сортировка «нет договора» → «нет ставки», внутри по объёму.
+  const unbilledRows = [...unbilledMap.values()].sort((a, b) => {
+    if (a.reason !== b.reason) return a.reason === "no_contract" ? -1 : 1;
+    return (b.trips + b.hours) - (a.trips + a.hours);
+  });
+  const unbilledSummary: UnbilledSummary = {
+    trips: unbilledRows.reduce((s, u) => s + u.trips, 0),
+    hours: Math.round(unbilledRows.reduce((s, u) => s + u.hours, 0) * 10) / 10,
+    vehicles: unbilledRows.length,
+  };
+
+  return { contracts, summary, daily, unbilled: unbilledRows, unbilledSummary };
 }
