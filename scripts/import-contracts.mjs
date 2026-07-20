@@ -506,17 +506,24 @@ async function main() {
     check(error, `${t} wipe`);
   }
 
-  // --- Машины: новые + привязка (нужно до прайсов из-за vehicle_id override) ---
-  for (const a of newVehicles) {
-    const { data, error } = await db.from("vehicles").insert({
-      org_id: ORG_ID, brand: a.brand ?? "не указана", reg_number: a.reg,
-      vehicle_type: a.type, accounting_type: a.type === "dump_truck" ? "trips" : "hours", is_active: true,
-    }).select("id, reg_number, brand, vehicle_type, contract_id").single();
-    check(error, `vehicle insert ${a.reg}`);
-    vehByCanon.set(canonReg(a.reg), data);
+  // --- Машины: только привязка существующих (инвариант 20.07: парк пополняется
+  // ТОЛЬКО фактами работы или вручную; договорные приложения машин не порождают).
+  // Создание из договоров — осознанно, флагом --create-vehicles.
+  if (process.argv.includes("--create-vehicles")) {
+    for (const a of newVehicles) {
+      const { data, error } = await db.from("vehicles").insert({
+        org_id: ORG_ID, brand: a.brand ?? "не указана", reg_number: a.reg,
+        vehicle_type: a.type, accounting_type: a.type === "dump_truck" ? "trips" : "hours", is_active: true,
+      }).select("id, reg_number, brand, vehicle_type, contract_id").single();
+      check(error, `vehicle insert ${a.reg}`);
+      vehByCanon.set(canonReg(a.reg), data);
+    }
+  } else if (newVehicles.length) {
+    console.log(`Машины из договоров НЕ созданы (${newVehicles.length}) — парк только из фактов работы (--create-vehicles для отмены).`);
   }
   for (const a of VEHICLE_ASSIGN) {
     const v = vehByCanon.get(canonReg(a.reg));
+    if (!v) { console.log(`Привязка пропущена: машины ${a.reg} нет в парке.`); continue; }
     const contract = CONTRACTS.find((c) => c.key === a.contract);
     const upd = {
       contractor_id: byKey.get(contract.contractor),
