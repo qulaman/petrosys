@@ -437,7 +437,14 @@ async function main() {
     check(insErr, `${table} insert`);
     return ins.id;
   };
-  const cardId = await ensureRow("fuel_cards", "card_number", "Карта ГСМ", { org_id: ORG_ID, card_number: "Карта ГСМ", operator: null, is_active: true });
+  // Карта: берём существующий единый счёт АЗС (решение заказчика 17.07 — один
+  // счёт), не создаём дублей с другим именем.
+  const { data: existCards, error: fcErr } = await db.from("fuel_cards")
+    .select("id").eq("org_id", ORG_ID).eq("is_active", true).limit(1);
+  check(fcErr, "fuel_cards select");
+  const cardId = existCards.length
+    ? existCards[0].id
+    : await ensureRow("fuel_cards", "card_number", "Счёт АЗС", { org_id: ORG_ID, card_number: "Счёт АЗС", operator: null, is_active: true });
   const tankerId = await ensureRow("tankers", "name", "Бензовоз", { org_id: ORG_ID, name: "Бензовоз", capacity_liters: null, is_active: true });
   const routeId = await ensureRow("routes", "name", "Не указан", { org_id: ORG_ID, name: "Не указан", is_active: true });
 

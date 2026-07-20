@@ -496,9 +496,16 @@ async function main() {
   const driverId = new Map(allDrivers.map((d) => [d.full_name, d.id]));
   console.log(`Водители: -${dropIds.length} старых без договора, +${newNames.length} из файла.`);
 
-  // Карта/бензовоз/маршрут — существующие или новые
-  const cardId = await ensureRow(db, "fuel_cards", "card_number", "Карта ГСМ",
-    { org_id: ORG_ID, card_number: "Карта ГСМ", operator: null, is_active: true });
+  // Карта/бензовоз/маршрут — существующие или новые.
+  // Карта: единый счёт АЗС (решение заказчика 17.07) — берём любую активную,
+  // по имени не ищем, чтобы не плодить дублей.
+  const { data: existCards, error: fcSelErr } = await db.from("fuel_cards")
+    .select("id").eq("org_id", ORG_ID).eq("is_active", true).limit(1);
+  check(fcSelErr, "fuel_cards select");
+  const cardId = existCards.length
+    ? existCards[0].id
+    : await ensureRow(db, "fuel_cards", "card_number", "Счёт АЗС",
+        { org_id: ORG_ID, card_number: "Счёт АЗС", operator: null, is_active: true });
   const tankerId = await ensureRow(db, "tankers", "name", "Бензовоз",
     { org_id: ORG_ID, name: "Бензовоз", capacity_liters: null, is_active: true });
   const routeId = await ensureRow(db, "routes", "name", "Не указан",
