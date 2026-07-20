@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, Wallet } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { fmtMoney, fmtInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -104,7 +105,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
             </thead>
             <tbody className="divide-y">
               {rows.map((c) => (
-                <tr key={c.id}>
+                <tr key={c.id} className="hover:bg-accent/40">
                   <td className="px-3 py-2 font-medium">
                     <Link href={settlementHref(c)} className="hover:underline" title="Открыть расчёт по договору">
                       {c.number}
@@ -119,7 +120,9 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
                 </tr>
               ))}
               {rows.length === 0 ? (
-                <tr><td colSpan={7} className="px-3 py-4 text-center text-muted-foreground">Договоров нет</td></tr>
+                <tr><td colSpan={7}>
+                  <EmptyState icon={Wallet} title="Договоров нет" description="Начисления появятся после добавления договоров и записей о работе." className="border-0 p-6" />
+                </td></tr>
               ) : null}
             </tbody>
             {rows.length > 0 ? (
@@ -155,7 +158,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
             </thead>
             <tbody className="divide-y">
               {effectiveRows.map((c) => (
-                <tr key={c.id}>
+                <tr key={c.id} className="hover:bg-accent/40">
                   <td className="px-3 py-2">
                     <Link href={settlementHref(c)} className="hover:underline" title="Открыть расчёт по договору">
                       {c.contractor} <span className="text-muted-foreground">· {c.number}</span>

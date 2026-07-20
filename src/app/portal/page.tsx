@@ -1,4 +1,6 @@
+import { Wallet } from "lucide-react";
 import { PortalShell } from "@/components/portal-shell";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PeriodSelector } from "@/components/period-selector";
 import { resolvePeriod } from "@/lib/journals/period";
 import { loadMoneyTabData } from "@/lib/data/dashboard";
@@ -27,7 +29,9 @@ export default async function PortalHome({ searchParams }: { searchParams: Promi
               <div className="flex justify-between text-sm text-muted-foreground"><span>Прогноз АВР</span><span className="tabular-nums">{fmtMoney(c.forecast)}</span></div>
             </div>
           ))}
-          {money.contracts.length === 0 ? <p className="text-sm text-muted-foreground">Нет данных за период</p> : null}
+          {money.contracts.length === 0 ? (
+            <EmptyState icon={Wallet} title="Нет данных за период" description="Выберите другой период — начисления появятся после записей о работе." className="sm:col-span-2" />
+          ) : null}
         </div>
       </div>
     </PortalShell>

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
-import { NavBar, type NavItem } from "@/components/nav-bar";
+import { NavBar, TitleIcon, type NavItem } from "@/components/nav-bar";
 import { ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import { ru } from "@/lib/i18n/ru";
 
@@ -84,7 +84,10 @@ export async function AppShell({
       </div>
 
       <main className={cn("flex-1 p-4", !isOffice ? "pb-24" : "")}>
-        <h1 className="mb-4 text-xl font-semibold">{title}</h1>
+        <h1 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+          <TitleIcon />
+          {title}
+        </h1>
         {children ?? (
           <p className="text-sm text-muted-foreground">Экран в разработке.</p>
         )}

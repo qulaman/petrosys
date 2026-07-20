@@ -21,11 +21,17 @@ export default async function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
-      <div className="flex justify-end p-4">
+    <div className="relative flex min-h-full flex-1 flex-col overflow-hidden">
+      {/* Фирменный фон: мягкое свечение сверху + крупная полупрозрачная монограмма */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_50%_-10%,color-mix(in_srgb,var(--primary)_14%,transparent),transparent)]"
+      />
+      <WagMonogram className="pointer-events-none absolute -bottom-24 -right-28 h-[420px] w-[476px] text-primary/[0.06]" />
+      <div className="relative flex justify-end p-4">
         <ThemeToggle />
       </div>
-      <div className="flex flex-1 items-center justify-center px-4 pb-16">
+      <div className="relative flex flex-1 items-center justify-center px-4 pb-16">
         <Card className="w-full max-w-sm">
           <CardHeader className="items-center text-center">
             <WagMonogram className="mx-auto mb-2 h-14 w-16 text-primary" />

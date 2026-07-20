@@ -1,14 +1,14 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { Activity, AlertTriangle, Droplet, Loader2, Timer, Wallet, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const TABS = [
-  { key: "today", label: "Сегодня" },
-  { key: "fuel", label: "Топливо" },
-  { key: "work", label: "Работа" },
-  { key: "money", label: "Подрядчики и деньги" },
+const TABS: { key: string; label: string; icon: LucideIcon }[] = [
+  { key: "today", label: "Сегодня", icon: Activity },
+  { key: "fuel", label: "Топливо", icon: Droplet },
+  { key: "work", label: "Работа", icon: Timer },
+  { key: "money", label: "Подрядчики и деньги", icon: Wallet },
 ];
 
 /** Спиннер внутри <Link>, пока грузится страница назначения (фикс. ширина — без прыжков). */
@@ -37,10 +37,11 @@ export function DashboardNav({
           key={t.key}
           href={`/fleet/dashboard?tab=${t.key}`}
           className={cn(
-            "flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium",
+            "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium",
             active === t.key ? "bg-accent" : "hover:bg-accent",
           )}
         >
+          <t.icon className={cn("size-4 shrink-0", active === t.key ? "text-primary" : "text-muted-foreground")} />
           {t.label}
           <LinkSpinner />
         </Link>

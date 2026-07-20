@@ -4,8 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { FileSignature, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { VEHICLE_TYPE_LABELS, type VehicleType } from "@/lib/domain";
@@ -216,7 +217,11 @@ export function ContractsList({
                 <td className="px-3 py-2">{c.is_active ? "да" : "—"}</td>
               </tr>
             ))}
-            {contracts.length === 0 ? <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">Договоров нет</td></tr> : null}
+            {contracts.length === 0 ? (
+              <tr><td colSpan={6}>
+                <EmptyState icon={FileSignature} title="Договоров нет" description="Создайте первый договор кнопкой выше — документы сформируются автоматически." className="border-0 p-6" />
+              </td></tr>
+            ) : null}
           </tbody>
         </table>
       </div>

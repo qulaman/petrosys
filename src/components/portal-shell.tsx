@@ -1,18 +1,18 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { signOut } from "@/lib/auth/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
+import { NavBar, TitleIcon, type NavItem } from "@/components/nav-bar";
 import { ru } from "@/lib/i18n/ru";
 
-const NAV = [
-  { href: "/portal", label: "Главная" },
-  { href: "/portal/trips", label: "Рейсы" },
-  { href: "/portal/shifts", label: "Смены" },
-  { href: "/portal/fuel", label: "Топливо" },
-  { href: "/portal/documents", label: "Документы" },
+const NAV: NavItem[] = [
+  { href: "/portal", label: "Главная", icon: "home", exact: true },
+  { href: "/portal/trips", label: "Рейсы", icon: "trips" },
+  { href: "/portal/shifts", label: "Смены", icon: "shifts" },
+  { href: "/portal/fuel", label: "Топливо", icon: "fuel" },
+  { href: "/portal/documents", label: "Документы", icon: "documents" },
 ];
 
 /** Отдельный layout портала подрядчика (read-only, роль contractor). */
@@ -44,16 +44,13 @@ export async function PortalShell({
         </div>
       </header>
 
-      <nav className="flex gap-1 overflow-x-auto border-b px-2 py-1.5">
-        {NAV.map((n) => (
-          <Link key={n.href} href={n.href} className="whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium hover:bg-accent">
-            {n.label}
-          </Link>
-        ))}
-      </nav>
+      <NavBar items={NAV} variant="top" />
 
       <main className="flex-1 p-4">
-        <h1 className="mb-4 text-xl font-semibold">{title}</h1>
+        <h1 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+          <TitleIcon />
+          {title}
+        </h1>
         {children}
       </main>
     </div>

@@ -3,8 +3,9 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, Droplet, Truck, ClipboardList, BookOpen,
-  Calculator, FileText, Loader2, Settings, User, type LucideIcon,
+  AlertTriangle, BookOpen, Calculator, ClipboardList, CreditCard, Droplet, FileSignature,
+  FileText, FileType2, Fuel, Home, LayoutDashboard, Loader2, QrCode, Settings,
+  SlidersHorizontal, Truck, User, Users, type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,12 +20,56 @@ const ICONS: Record<string, LucideIcon> = {
   documents: FileText,
   admin: Settings,
   portal: User,
+  home: Home,
 };
+
+/** Иконка текущего экрана для заголовка страницы: первый префикс-матч по пути. */
+const ROUTE_ICONS: [string, LucideIcon][] = [
+  ["/fleet/dashboard/anomalies", AlertTriangle],
+  ["/fleet/dashboard", LayoutDashboard],
+  ["/fleet/fuel/issue", Droplet],
+  ["/fleet/fuel/tanker", Fuel],
+  ["/fleet/shifts", ClipboardList],
+  ["/fleet/trips", Truck],
+  ["/fleet/journals/fuel", Droplet],
+  ["/fleet/journals/shifts", ClipboardList],
+  ["/fleet/journals/trips", Truck],
+  ["/fleet/journals", BookOpen],
+  ["/fleet/office/settlement", Calculator],
+  ["/fleet/office/documents", FileText],
+  ["/fleet/admin/settings", SlidersHorizontal],
+  ["/fleet/admin/users", Users],
+  ["/fleet/admin/qr", QrCode],
+  ["/fleet/admin/contracts", FileSignature],
+  ["/fleet/admin/templates", FileType2],
+  ["/fleet/admin/fuel_cards", CreditCard],
+  ["/fleet/admin", Settings],
+  ["/portal/trips", Truck],
+  ["/portal/shifts", ClipboardList],
+  ["/portal/fuel", Droplet],
+  ["/portal/documents", FileText],
+  ["/portal", Home],
+];
+
+/** Иконка активного экрана рядом с h1 (совпадает с иконкой в меню). */
+export function TitleIcon({ className }: { className?: string }) {
+  const path = usePathname();
+  const found = ROUTE_ICONS.find(([p]) => path === p || path.startsWith(p + "/"))?.[1] ?? ROUTE_ICONS.find(([p]) => path.startsWith(p))?.[1];
+  if (!found) return null;
+  const Icon = found;
+  return (
+    <span className={cn("grid shrink-0 place-items-center rounded-md bg-primary/10 p-1.5 text-primary", className)}>
+      <Icon className="size-4" />
+    </span>
+  );
+}
 
 export interface NavItem {
   href: string;
   label: string;
   icon: string;
+  /** Подсвечивать только при точном совпадении пути (хабы вроде /portal). */
+  exact?: boolean;
 }
 
 /** Иконка пункта меню: пока грузится переход — крутится спиннер вместо иконки. */
@@ -33,21 +78,10 @@ function PendingIcon({ icon: Icon, className }: { icon: LucideIcon; className: s
   return pending ? <Loader2 className={cn(className, "animate-spin")} /> : <Icon className={className} />;
 }
 
-/** Спиннер фиксированной ширины для текстового меню — без сдвига раскладки. */
-function PendingHint() {
-  const { pending } = useLinkStatus();
-  return (
-    <Loader2
-      aria-hidden
-      className={cn("size-3.5 shrink-0 animate-spin transition-opacity", pending ? "opacity-100" : "opacity-0")}
-    />
-  );
-}
-
 export function NavBar({ items, variant }: { items: NavItem[]; variant: "top" | "bottom" }) {
   const path = usePathname();
-  const active = (href: string) =>
-    path === href || (href !== "/" && path.startsWith(href + "/")) || (href.includes("?") && path === href.split("?")[0]);
+  const active = (n: NavItem) =>
+    n.exact ? path === n.href : path === n.href || (n.href !== "/" && path.startsWith(n.href + "/"));
 
   if (variant === "bottom") {
     return (
@@ -61,7 +95,7 @@ export function NavBar({ items, variant }: { items: NavItem[]; variant: "top" | 
             href={n.href}
             className={cn(
               "flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-medium",
-              active(n.href) ? "text-primary" : "text-muted-foreground",
+              active(n) ? "text-primary" : "text-muted-foreground",
             )}
           >
             <PendingIcon icon={ICONS[n.icon] ?? Truck} className="size-6" />
@@ -79,12 +113,15 @@ export function NavBar({ items, variant }: { items: NavItem[]; variant: "top" | 
           key={n.href}
           href={n.href}
           className={cn(
-            "flex items-center gap-1 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
-            active(n.href) ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
+            active(n) ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
         >
+          <PendingIcon
+            icon={ICONS[n.icon] ?? Truck}
+            className={cn("size-4 shrink-0", active(n) ? "text-primary" : "")}
+          />
           {n.label}
-          <PendingHint />
         </Link>
       ))}
     </nav>

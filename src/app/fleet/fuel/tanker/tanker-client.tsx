@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownRight, ArrowUpRight, Ruler, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Fuel, Ruler, Trash2 } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -226,7 +227,7 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
         <Label>История операций</Label>
         <div className="flex flex-col divide-y rounded-lg border">
           {events.length === 0 ? (
-            <p className="p-3 text-sm text-muted-foreground">Операций пока нет</p>
+            <EmptyState icon={Fuel} title="Операций пока нет" description="Приходы, выдачи и замеры появятся здесь." className="border-0 p-6" />
           ) : (
             events.map((e) => (
               <div key={`${e.kind}-${e.id}`} className="flex items-center gap-3 p-3">

@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Download, Pencil, Trash2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
@@ -94,7 +95,7 @@ export function TripJournal({
           </thead>
           <tbody className="divide-y">
             {shown.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} className="hover:bg-accent/40">
                 <td className="whitespace-nowrap px-3 py-2">{fmtDateTime(r.at)}</td>
                 <td className="px-3 py-2 font-medium">{r.reg}</td>
                 <td className="px-3 py-2">{r.driver}</td>
@@ -112,7 +113,9 @@ export function TripJournal({
               </tr>
             ))}
             {rows.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 7 : 6} className="px-3 py-6 text-center text-muted-foreground">Нет рейсов за период</td></tr>
+              <tr><td colSpan={isAdmin ? 7 : 6}>
+                <EmptyState icon={Truck} title="Нет рейсов за период" description="Измените период или фильтры выше." className="border-0 p-6" />
+              </td></tr>
             ) : null}
           </tbody>
         </table>

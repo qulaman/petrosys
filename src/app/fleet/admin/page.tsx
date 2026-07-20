@@ -1,8 +1,24 @@
 import Link from "next/link";
-import { QrCode, Users, FileSignature, FileType2, SlidersHorizontal } from "lucide-react";
+import {
+  Building2, ClipboardX, CreditCard, FileSignature, FileType2, Fuel, Gavel, QrCode,
+  Route, SlidersHorizontal, Truck, Users, Wrench, type LucideIcon,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { ENTITIES, ENTITY_ORDER } from "@/lib/admin/registry";
+
+/** Иконки карточек справочников (реестр — только про CRUD, иконки — презентация). */
+const ENTITY_ICONS: Record<string, LucideIcon> = {
+  vehicles: Truck,
+  drivers: Users,
+  contractors: Building2,
+  fuel_cards: CreditCard,
+  tankers: Fuel,
+  routes: Route,
+  work_types: Wrench,
+  downtime_records: ClipboardX,
+  penalties: Gavel,
+};
 
 export default async function AdminHome() {
   const current = await getCurrentProfile();
@@ -23,15 +39,18 @@ export default async function AdminHome() {
         >
           <FileType2 className="size-5" /> Шаблоны документов
         </Link>
-        {ENTITY_ORDER.map((slug) => (
-          <Link
-            key={slug}
-            href={`/fleet/admin/${slug}`}
-            className="rounded-lg border p-4 font-medium hover:bg-accent"
-          >
-            {ENTITIES[slug].title}
-          </Link>
-        ))}
+        {ENTITY_ORDER.map((slug) => {
+          const Icon = ENTITY_ICONS[slug] ?? Wrench;
+          return (
+            <Link
+              key={slug}
+              href={`/fleet/admin/${slug}`}
+              className="flex items-center gap-2 rounded-lg border p-4 font-medium hover:bg-accent"
+            >
+              <Icon className="size-5" /> {ENTITIES[slug].title}
+            </Link>
+          );
+        })}
         <Link
           href="/fleet/admin/qr"
           className="flex items-center gap-2 rounded-lg border p-4 font-medium hover:bg-accent"

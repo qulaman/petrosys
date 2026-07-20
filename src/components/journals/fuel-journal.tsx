@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Download, Droplet, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -107,7 +108,7 @@ export function FuelJournal({
           </thead>
           <tbody className="divide-y">
             {shown.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} className="hover:bg-accent/40">
                 <td className="whitespace-nowrap px-3 py-2">{fmtDateTime(r.at)}</td>
                 <td className="px-3 py-2 font-medium">{r.reg}</td>
                 <td className="px-3 py-2">{r.driver}</td>
@@ -127,7 +128,9 @@ export function FuelJournal({
               </tr>
             ))}
             {rows.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 9 : 8} className="px-3 py-6 text-center text-muted-foreground">Нет записей за период</td></tr>
+              <tr><td colSpan={isAdmin ? 9 : 8}>
+                <EmptyState icon={Droplet} title="Нет записей за период" description="Измените период или фильтры выше." className="border-0 p-6" />
+              </td></tr>
             ) : null}
           </tbody>
         </table>

@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { FileSignature } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PeriodSelector } from "@/components/period-selector";
 import { resolvePeriod } from "@/lib/journals/period";
 import { loadContractOptions, loadSettlement } from "@/lib/data/settlement";
@@ -20,14 +22,24 @@ export default async function SettlementPage({ searchParams }: { searchParams: P
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {contracts.map((c) => (
             <Link key={c.id} href={`/fleet/office/settlement?contract=${c.id}`} className="rounded-lg border p-4 hover:bg-accent">
-              <p className="font-medium">{c.number}</p>
+              <p className="flex items-center gap-2 font-medium">
+                <FileSignature className="size-4 shrink-0 text-primary" />
+                {c.number}
+              </p>
               <p className="text-sm text-muted-foreground">{c.contractor}</p>
               <p className="text-xs text-muted-foreground">
                 {c.contract_type === "transportation" ? "перевозка" : "услуги техники"} · АВР {c.billing_period === "15days" ? "15 дней" : "месяц"}
               </p>
             </Link>
           ))}
-          {contracts.length === 0 ? <p className="text-sm text-muted-foreground">Договоров нет</p> : null}
+          {contracts.length === 0 ? (
+            <EmptyState
+              icon={FileSignature}
+              title="Договоров нет"
+              description="Добавьте договор в «Справочники → Договоры и прайсы» — здесь появится расчёт по нему."
+              className="sm:col-span-2 lg:col-span-3"
+            />
+          ) : null}
         </div>
       </AppShell>
     );

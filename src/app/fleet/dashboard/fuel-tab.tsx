@@ -12,7 +12,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Gauge } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { fmtInt, fmtLiters } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { FuelTabData } from "@/lib/data/dashboard";
@@ -107,9 +108,11 @@ export function FuelTab({ data }: { data: FuelTabData }) {
             </div>
           ))}
           {normRows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {data.norm.length === 0 ? "Нет данных по моточасам за период" : "Превышений нет"}
-            </p>
+            <EmptyState
+              icon={Gauge}
+              title={data.norm.length === 0 ? "Нет данных по моточасам за период" : "Превышений нет"}
+              className="border-0 p-4"
+            />
           ) : null}
         </div>
       </section>

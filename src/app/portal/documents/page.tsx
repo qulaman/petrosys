@@ -1,4 +1,6 @@
+import { FileText } from "lucide-react";
 import { PortalShell } from "@/components/portal-shell";
+import { EmptyState } from "@/components/ui/empty-state";
 import { createClient } from "@/lib/supabase/server";
 import { fmtDateTime } from "@/lib/format";
 import { DocDownload } from "@/components/documents/doc-download";
@@ -33,7 +35,7 @@ export default async function PortalDocuments() {
           </thead>
           <tbody className="divide-y">
             {rows.map((d) => (
-              <tr key={d.id}>
+              <tr key={d.id} className="hover:bg-accent/40">
                 <td className="px-3 py-2 font-medium">{DOC_TYPES[d.doc_type] ?? d.doc_type}</td>
                 <td className="px-3 py-2">{d.number}</td>
                 <td className="px-3 py-2">{d.period_from ? `${d.period_from} — ${d.period_to}` : "—"}</td>
@@ -41,7 +43,11 @@ export default async function PortalDocuments() {
                 <td className="px-3 py-2 text-right"><DocDownload docId={d.id} /></td>
               </tr>
             ))}
-            {rows.length === 0 ? <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">Документов пока нет</td></tr> : null}
+            {rows.length === 0 ? (
+              <tr><td colSpan={5}>
+                <EmptyState icon={FileText} title="Документов пока нет" description="Здесь появятся акты и документы по вашим договорам." className="border-0 p-6" />
+              </td></tr>
+            ) : null}
           </tbody>
         </table>
       </div>

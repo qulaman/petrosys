@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Download, Trash2 } from "lucide-react";
+import { ClipboardList, Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -75,7 +76,7 @@ export function ShiftJournal({
           </thead>
           <tbody className="divide-y">
             {shown.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} className="hover:bg-accent/40">
                 <td className="whitespace-nowrap px-3 py-2">{r.date}</td>
                 <td className="px-3 py-2">{r.shift === "day" ? "День" : "Ночь"}</td>
                 <td className="px-3 py-2 font-medium">{r.reg}</td>
@@ -98,7 +99,9 @@ export function ShiftJournal({
               </tr>
             ))}
             {rows.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 8 : 7} className="px-3 py-6 text-center text-muted-foreground">Нет смен за период</td></tr>
+              <tr><td colSpan={isAdmin ? 8 : 7}>
+                <EmptyState icon={ClipboardList} title="Нет смен за период" description="Измените период или фильтры выше." className="border-0 p-6" />
+              </td></tr>
             ) : null}
           </tbody>
         </table>

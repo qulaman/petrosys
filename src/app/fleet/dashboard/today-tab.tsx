@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Droplet, Fuel, MapPin, Radio, Timer, Truck } from "lucide-react";
+import { Activity, AlertTriangle, Droplet, Fuel, MapPin, Radio, Timer, Truck } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { createClient } from "@/lib/supabase/client";
 import { fmtInt, fmtLiters, fmtTime } from "@/lib/format";
 import { ANOMALY_LABELS } from "@/lib/anomalies";
@@ -184,7 +185,14 @@ export function TodayTab({ data }: { data: TodayData }) {
               <span className="w-12 shrink-0 text-right text-xs text-muted-foreground">{fmtTime(e.at)}</span>
             </div>
           ))}
-          {events.length === 0 ? <p className="p-3 text-sm text-muted-foreground">Событий сегодня пока нет</p> : null}
+          {events.length === 0 ? (
+            <EmptyState
+              icon={Activity}
+              title="Событий сегодня пока нет"
+              description="Заправки, рейсы и смены появятся здесь в реальном времени."
+              className="border-0 p-6"
+            />
+          ) : null}
         </div>
       </section>
 

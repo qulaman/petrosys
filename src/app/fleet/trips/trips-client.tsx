@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, Check, CopyPlus, FilePlus2, RotateCw, ScanLine, Truck, X } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -369,7 +370,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
             );
           })}
           {entries.length === 0 && recentTrips.length === 0 ? (
-            <p className="p-3 text-sm text-muted-foreground">Рейсов пока нет</p>
+            <EmptyState icon={Truck} title="Рейсов пока нет" description="Отсканируйте QR машины или выберите её выше — рейс запишется в два касания." className="border-0 p-6" />
           ) : null}
         </div>
       </section>

@@ -4,9 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, ChevronDown, ExternalLink, RefreshCw, X } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ExternalLink, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { SearchSelect } from "@/components/ui/search-select";
 import { fmtDateTime } from "@/lib/format";
 import { SEVERITY_LABELS, STATUS_LABELS } from "@/lib/anomalies";
@@ -54,11 +56,11 @@ const DATE_FILTERS: { key: string; label: string; days: number | null }[] = [
   { key: "30", label: "30 дней", days: 30 },
 ];
 
-const statusColor: Record<string, string> = {
-  new: "text-amber-600",
-  reviewed: "text-blue-600",
-  confirmed: "text-destructive",
-  dismissed: "text-muted-foreground",
+const statusTone: Record<string, StatusTone> = {
+  new: "amber",
+  reviewed: "blue",
+  confirmed: "red",
+  dismissed: "muted",
 };
 
 const PAGE_SIZE = 50;
@@ -299,7 +301,7 @@ export function AnomaliesClient({ rows }: { rows: AnomalyRow[] }) {
                     <span className="font-medium">{a.typeLabel}</span>
                     {a.reg ? <span className="text-sm text-muted-foreground">{a.reg}</span> : null}
                     {a.driver && !a.reg ? <span className="text-sm text-muted-foreground">{a.driver}</span> : null}
-                    <span className={cn("text-xs font-medium", statusColor[st])}>{STATUS_LABELS[st]}</span>
+                    <StatusBadge tone={statusTone[st] ?? "muted"}>{STATUS_LABELS[st]}</StatusBadge>
                     <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
                       важность: {SEVERITY_LABELS[a.severity] ?? a.severity}
                       <ChevronDown className={cn("size-4 transition-transform", isOpen ? "rotate-180" : "")} />
@@ -384,7 +386,12 @@ export function AnomaliesClient({ rows }: { rows: AnomalyRow[] }) {
           );
         })}
         {pageRows.length === 0 ? (
-          <p className="p-6 text-center text-sm text-muted-foreground">Аномалий по выбранным фильтрам нет</p>
+          <EmptyState
+            icon={CheckCircle2}
+            title="Аномалий по выбранным фильтрам нет"
+            description="Всё разобрано — или измените фильтры, чтобы посмотреть остальные."
+            className="border-0"
+          />
         ) : null}
       </div>
 
