@@ -9,6 +9,7 @@ import { saveDetectorSettings } from "./actions";
 export interface DetectorSettings {
   tanker_gap_liters: number;
   no_fuel_days_trips: number;
+  no_fuel_days_trips_single: number;
   no_fuel_days_hours: number;
 }
 
@@ -20,13 +21,18 @@ const FIELDS: { key: keyof DetectorSettings; label: string; hint: string }[] = [
   },
   {
     key: "no_fuel_days_trips",
-    label: "Дней работы без заправки — самосвалы",
-    hint: "Самосвал работает столько дней подряд без единой выдачи топлива → аномалия «Работа без топлива».",
+    label: "Дней работы без заправки — самосвалы в 2 смены",
+    hint: "При работе день + ночь самосвалы заправляются каждый день; столько дней подряд без единой выдачи → аномалия «Работа без топлива». Двусменность определяется по ночным выводам на линию.",
+  },
+  {
+    key: "no_fuel_days_trips_single",
+    label: "Дней работы без заправки — самосвалы в 1 смену",
+    hint: "При работе в одну смену заправка обычно раз в два дня — порог длиннее.",
   },
   {
     key: "no_fuel_days_hours",
     label: "Дней работы без заправки — остальная техника",
-    hint: "То же для техники на моточасах (грейдеры, экскаваторы и т.д.).",
+    hint: "Техника на моточасах (грейдеры, экскаваторы и т.д.) может заправляться раз в несколько дней — отсутствие заправки при недавней выдаче не аномалия.",
   },
 ];
 
@@ -34,6 +40,7 @@ export function SettingsForm({ initial }: { initial: DetectorSettings }) {
   const [form, setForm] = useState<Record<keyof DetectorSettings, string>>({
     tanker_gap_liters: String(initial.tanker_gap_liters),
     no_fuel_days_trips: String(initial.no_fuel_days_trips),
+    no_fuel_days_trips_single: String(initial.no_fuel_days_trips_single),
     no_fuel_days_hours: String(initial.no_fuel_days_hours),
   });
   const [pending, start] = useTransition();
@@ -43,6 +50,7 @@ export function SettingsForm({ initial }: { initial: DetectorSettings }) {
       const res = await saveDetectorSettings({
         tanker_gap_liters: parseFloat(form.tanker_gap_liters),
         no_fuel_days_trips: parseInt(form.no_fuel_days_trips, 10),
+        no_fuel_days_trips_single: parseInt(form.no_fuel_days_trips_single, 10),
         no_fuel_days_hours: parseInt(form.no_fuel_days_hours, 10),
       });
       if (res.ok) toast.success("Настройки сохранены — применятся при следующем пересчёте аномалий");

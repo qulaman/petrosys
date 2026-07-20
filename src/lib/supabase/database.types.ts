@@ -647,6 +647,7 @@ export type Database = {
         Row: {
           no_fuel_days_hours: number
           no_fuel_days_trips: number
+          no_fuel_days_trips_single: number
           org_id: string
           tanker_gap_liters: number
           updated_at: string
@@ -654,6 +655,7 @@ export type Database = {
         Insert: {
           no_fuel_days_hours?: number
           no_fuel_days_trips?: number
+          no_fuel_days_trips_single?: number
           org_id?: string
           tanker_gap_liters?: number
           updated_at?: string
@@ -661,6 +663,7 @@ export type Database = {
         Update: {
           no_fuel_days_hours?: number
           no_fuel_days_trips?: number
+          no_fuel_days_trips_single?: number
           org_id?: string
           tanker_gap_liters?: number
           updated_at?: string

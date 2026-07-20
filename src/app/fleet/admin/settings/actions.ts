@@ -11,6 +11,7 @@ type Result = { ok: true } | { ok: false; error: string };
 const zSettings = z.object({
   tanker_gap_liters: z.number().positive().max(1000),
   no_fuel_days_trips: z.number().int().min(1).max(30),
+  no_fuel_days_trips_single: z.number().int().min(1).max(30),
   no_fuel_days_hours: z.number().int().min(1).max(30),
 });
 

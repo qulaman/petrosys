@@ -25,6 +25,7 @@ const monthQ = (ym: string) => `period=custom&from=${ym}-01&to=${lastOfMonth(ym)
 interface Thresholds {
   tankerGap: number;
   noFuelTrips: number;
+  noFuelTripsSingle: number;
   noFuelHours: number;
 }
 
@@ -55,7 +56,7 @@ function present(
     case "work_no_fuel":
       return {
         summary: `${r}: работает ${refs.days} дн. подряд без заправок`,
-        explanation: `Машина работала ${refs.days} дн. подряд (окно до ${ddmm(date)}), но ни одной выдачи топлива не зафиксировано — возможно, заправки идут мимо учёта. Порог в настройках детекторов: ${th.noFuelTrips} дн. для самосвалов, ${th.noFuelHours} дн. для остальной техники.`,
+        explanation: `Машина работала ${refs.days} дн. подряд (окно до ${ddmm(date)}), но ни одной выдачи топлива не зафиксировано — возможно, заправки идут мимо учёта. Заправка внутри окна снимает флаг. Порог в настройках детекторов: ${th.noFuelTrips} дн. для самосвалов в 2 смены, ${th.noFuelTripsSingle} дн. в 1 смену, ${th.noFuelHours} дн. для остальной техники.`,
         links: [
           { label: "Журнал ГСМ машины", href: `/fleet/journals/fuel?vehicle=${v}` },
           { label: "Табель за день", href: `/fleet/journals/shifts?vehicle=${v}&${dayQ(date)}` },
@@ -138,7 +139,7 @@ export default async function AnomaliesPage() {
     ),
     supabase.from("vehicles").select("id, reg_number"),
     supabase.from("drivers").select("id, full_name"),
-    supabase.from("org_settings").select("tanker_gap_liters, no_fuel_days_trips, no_fuel_days_hours").maybeSingle(),
+    supabase.from("org_settings").select("tanker_gap_liters, no_fuel_days_trips, no_fuel_days_trips_single, no_fuel_days_hours").maybeSingle(),
     // Имена разобравших: RLS отдаёт только свой профиль — список через admin строго по org_id (инвариант №3).
     admin.from("profiles").select("id, full_name").eq("org_id", orgId),
   ]);
@@ -149,7 +150,8 @@ export default async function AnomaliesPage() {
   const th: Thresholds = {
     tankerGap: Number(settingsRes.data?.tanker_gap_liters ?? 20),
     noFuelTrips: settingsRes.data?.no_fuel_days_trips ?? 2,
-    noFuelHours: settingsRes.data?.no_fuel_days_hours ?? 3,
+    noFuelTripsSingle: settingsRes.data?.no_fuel_days_trips_single ?? 3,
+    noFuelHours: settingsRes.data?.no_fuel_days_hours ?? 5,
   };
 
   const rows: AnomalyRow[] = anomalies
