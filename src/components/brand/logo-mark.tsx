@@ -1,25 +1,9 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Знак Arlan Ops: треугольник из трёх уступов карьера (флэт, по мотивам
- * фирменного треугольника West Arlan Group). Цвет — currentColor.
- * `animated` — ступени мягко пульсируют снизу вверх (экраны загрузки).
- */
-export function LogoMark({ className, animated = false }: { className?: string; animated?: boolean }) {
-  const band = (i: number) =>
-    animated ? { className: "brand-band", style: { animationDelay: `${i * 0.18}s` } } : {};
-  return (
-    <svg viewBox="0 0 96 96" fill="currentColor" aria-hidden className={cn("shrink-0", className)}>
-      <path d="M17.1 65 H78.9 L92 90 H4 Z" {...band(0)} />
-      <path d="M30.7 39 H65.3 L76.3 60 H19.7 Z" {...band(1)} />
-      <path d="M48 6 L62.7 34 H33.3 Z" {...band(2)} />
-    </svg>
-  );
-}
-
-/**
- * Фирменная монограмма «WA» West Arlan Group (перекрашена в currentColor —
- * в приложении используется оранжевой). Для крупных мест: логин, сплэш.
+ * Фирменный треугольник «WA» West Arlan Group (перекрашен в currentColor —
+ * в приложении используется оранжевым). Знак приложения Arlan Ops:
+ * шапки, логин, иконки, анимация загрузки.
  */
 export function WagMonogram({ className }: { className?: string }) {
   return (

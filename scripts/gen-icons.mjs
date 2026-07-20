@@ -1,23 +1,26 @@
-// Генерация PWA-иконок и favicon из знака Arlan Ops (треугольник-уступы).
+// Генерация PWA-иконок и favicon из фирменного треугольника WAG (logo/badge-mono.svg).
 // Запуск: node scripts/gen-icons.mjs → public/icon-{192,512,maskable}.png, src/app/icon.png
 import { createRequire } from "node:module";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 const require = createRequire("c:/WAG/PetroSys/package.json");
 const sharp = require("sharp");
 
 const BRAND = "#c2410c"; // primary светлой темы
+// Путь монограммы «WA» — из фирменного logo/badge-mono.svg (viewBox 719.49×635.66).
+const MONO_PATH = readFileSync("logo/badge-mono.svg", "utf8").match(/ d="([^"]+)"/)[1];
+const VB_W = 719.49;
+const VB_H = 635.66;
 
-/** Знак в белом на оранжевой плашке. pad — доля поля вокруг знака (maskable требует больше). */
+/** Монограмма в белом на оранжевой плашке. pad — доля поля вокруг знака (maskable требует больше). */
 function svg(size, pad, radius) {
   const inner = size * (1 - 2 * pad);
-  const off = size * pad;
-  const s = inner / 96;
+  const s = inner / VB_W;
+  const offX = size * pad;
+  const offY = (size - VB_H * s) / 2; // вертикальное центрирование (знак шире, чем выше)
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <rect width="${size}" height="${size}" rx="${radius}" fill="${BRAND}"/>
-  <g transform="translate(${off},${off}) scale(${s})" fill="#ffffff">
-    <path d="M17.1 65 H78.9 L92 90 H4 Z"/>
-    <path d="M30.7 39 H65.3 L76.3 60 H19.7 Z"/>
-    <path d="M48 6 L62.7 34 H33.3 Z"/>
+  <g transform="translate(${offX},${offY}) scale(${s})">
+    <path fill="#ffffff" d="${MONO_PATH}"/>
   </g>
 </svg>`;
 }
