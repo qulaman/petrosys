@@ -40,6 +40,12 @@ export interface GeoPoint {
   lng: number;
 }
 
+/** План/факт выхода самосвалов на линию (по выводам учётчика за сегодня). */
+export interface LineupToday {
+  planned: number;
+  worked: number;
+  notOutRegs: string[];
+}
 export interface TodayData {
   orgId: string;
   date: string;
@@ -50,9 +56,13 @@ export interface TodayData {
   hoursToday: number;
   litersCard: number;
   litersTanker: number;
+  /** Начислено сегодня по договорным ставкам (оценка: включая черновики журналов). */
+  accruedToday: number;
   /** Вчерашние значения для Δ — до того же часа, что и сейчас (сравнение сопоставимо). */
-  prev: { trips: number; hours: number; liters: number };
+  prev: { trips: number; hours: number; liters: number; accrued: number };
+  lineup: LineupToday;
   attention: AttentionItem[];
+  /** Последняя гео-точка каждой машины с записями за сегодня. */
   geoPoints: GeoPoint[];
   recentEvents: FeedEvent[];
   tankerBalances: TankerBalanceRow[];
@@ -76,25 +86,72 @@ export async function loadTodayData(): Promise<TodayData> {
   const supabase = await createClient();
   const admin = createAdminClient();
   // Одна волна: пользовательские выборки + admin-агрегаты (зависят только от orgId).
-  const [veh, drv, fuelRows, tripRows, shiftRows, prevFuel, prevTrips, prevShifts, attentionRes, balRes, tankersRes] =
+  const [veh, drv, fuelRows, tripRows, shiftRows, prevFuel, prevTripRows, prevShifts, attentionRes, balRes, tankersRes, prices, lineupsRes] =
     await Promise.all([
-      supabase.from("vehicles").select("id, reg_number, is_active"),
+      supabase.from("vehicles").select("id, reg_number, is_active, vehicle_type, contract_id"),
       supabase.from("drivers").select("id, full_name"),
       fetchAll((f, t) => supabase.from("fuel_issues").select("id, created_at, liters, source_type, vehicle_id, driver_id, geo_lat, geo_lng").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("trip_records").select("id, created_at, vehicle_id, driver_id, geo_lat, geo_lng").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("shift_records").select("id, created_at, vehicle_id, driver_id, hours").eq("shift_date", period.fromDate).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("fuel_issues").select("liters").gte("created_at", prevFromISO).lt("created_at", prevCutISO).order("id").range(f, t)),
-      supabase.from("trip_records").select("id", { count: "exact", head: true }).gte("created_at", prevFromISO).lt("created_at", prevCutISO),
-      fetchAll((f, t) => supabase.from("shift_records").select("hours").eq("shift_date", prevFromDate).lt("created_at", prevCutISO).order("id").range(f, t)),
+      fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at").gte("created_at", prevFromISO).lt("created_at", prevCutISO).order("id").range(f, t)),
+      fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours").eq("shift_date", prevFromDate).lt("created_at", prevCutISO).order("id").range(f, t)),
       supabase.from("anomalies").select("id, type, detected_at, entity_refs").eq("status", "new").order("detected_at", { ascending: false }).limit(5),
       admin.from("tanker_balances").select("tanker_id, calculated_liters, last_measured_at").eq("org_id", orgId),
       admin.from("tankers").select("id, name").eq("org_id", orgId).eq("is_active", true),
+      fetchAll((f, t) => supabase.from("price_list").select("contract_id, unit, vehicle_type, vehicle_id, price, valid_from").order("id").range(f, t)),
+      supabase.from("trip_lineups").select("id").eq("work_date", period.fromDate),
     ]);
 
   const vehicleNames: Record<string, string> = {};
   for (const v of veh.data ?? []) vehicleNames[v.id] = v.reg_number;
   const driverNames: Record<string, string> = {};
   for (const d of drv.data ?? []) driverNames[d.id] = d.full_name;
+  const vehInfo = new Map((veh.data ?? []).map((v) => [v.id, v]));
+
+  // «Начислено сегодня» — оперативная оценка по договорным ставкам
+  // (включая черновики журналов — как и плитка часов; деньги в расчётах строже).
+  const pricesByContract = new Map<string, RatePriceRow[]>();
+  for (const p of prices) {
+    if (!p.contract_id) continue;
+    (pricesByContract.get(p.contract_id) ?? pricesByContract.set(p.contract_id, []).get(p.contract_id))!
+      .push({ unit: p.unit, vehicle_type: p.vehicle_type, vehicle_id: p.vehicle_id, price: Number(p.price), valid_from: p.valid_from });
+  }
+  const tripAccrual = (rows: { vehicle_id: string; created_at: string }[]) => {
+    let sum = 0;
+    for (const r of rows) {
+      const v = vehInfo.get(r.vehicle_id);
+      if (!v?.contract_id) continue;
+      sum += resolveRate(pricesByContract.get(v.contract_id) ?? [], "trip", v.id, v.vehicle_type, aqtobeDate(r.created_at)) ?? 0;
+    }
+    return sum;
+  };
+  const shiftAccrual = (rows: { vehicle_id: string; hours: number }[], date: string) => {
+    let sum = 0;
+    for (const r of rows) {
+      const v = vehInfo.get(r.vehicle_id);
+      if (!v?.contract_id) continue;
+      const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "hour", v.id, v.vehicle_type, date);
+      if (rate != null) sum += rate * Number(r.hours);
+    }
+    return sum;
+  };
+  const accruedToday = Math.round(tripAccrual(tripRows) + shiftAccrual(shiftRows, period.fromDate));
+  const prevAccrued = Math.round(tripAccrual(prevTripRows) + shiftAccrual(prevShifts, prevFromDate));
+
+  // План/факт выхода на линию: выводы учётчика за сегодня против машин с рейсами.
+  const lineupIds = (lineupsRes.data ?? []).map((l) => l.id);
+  let lineup: LineupToday = { planned: 0, worked: 0, notOutRegs: [] };
+  if (lineupIds.length) {
+    const { data: lv } = await supabase.from("trip_lineup_vehicles").select("vehicle_id").in("lineup_id", lineupIds);
+    const plannedIds = new Set((lv ?? []).map((x) => x.vehicle_id));
+    const workedIds = new Set(tripRows.map((t) => t.vehicle_id));
+    const notOutRegs = [...plannedIds]
+      .filter((id) => !workedIds.has(id))
+      .map((id) => vehicleNames[id] ?? "—")
+      .sort((a, b) => a.localeCompare(b, "ru"));
+    lineup = { planned: plannedIds.size, worked: plannedIds.size - notOutRegs.length, notOutRegs };
+  }
 
   const online = new Set<string>();
   for (const r of fuelRows) online.add(r.vehicle_id);
@@ -136,9 +193,10 @@ export async function loadTodayData(): Promise<TodayData> {
 
   // Δ ко вчера (к этому часу)
   const prev = {
-    trips: prevTrips.count ?? 0,
+    trips: prevTripRows.length,
     hours: prevShifts.reduce((s, r) => s + Number(r.hours), 0),
     liters: prevFuel.reduce((s, r) => s + Number(r.liters), 0),
+    accrued: prevAccrued,
   };
 
   // «Требует внимания» — свежие аномалии с привязкой к машине.
@@ -152,17 +210,18 @@ export async function loadTodayData(): Promise<TodayData> {
     };
   });
 
-  // Последние гео-точки записей (учёт идёт по всему объекту).
-  const geoPoints: GeoPoint[] = [
-    ...fuelRows.filter((r) => r.geo_lat != null && r.geo_lng != null).map((r) => ({
-      kind: "fuel" as const, reg: vehicleNames[r.vehicle_id] ?? "—", at: r.created_at,
-      lat: Number(r.geo_lat), lng: Number(r.geo_lng),
-    })),
-    ...tripRows.filter((r) => r.geo_lat != null && r.geo_lng != null).map((r) => ({
-      kind: "trip" as const, reg: vehicleNames[r.vehicle_id] ?? "—", at: r.created_at,
-      lat: Number(r.geo_lat), lng: Number(r.geo_lng),
-    })),
-  ].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 5);
+  // Последняя гео-точка каждой машины за сегодня (учёт идёт по всему объекту).
+  const lastByVehicle = new Map<string, GeoPoint>();
+  const considerGeo = (vehicleId: string, kind: "fuel" | "trip", at: string, lat: unknown, lng: unknown) => {
+    if (lat == null || lng == null) return;
+    const cur = lastByVehicle.get(vehicleId);
+    if (!cur || cur.at < at) {
+      lastByVehicle.set(vehicleId, { kind, reg: vehicleNames[vehicleId] ?? "—", at, lat: Number(lat), lng: Number(lng) });
+    }
+  };
+  for (const r of fuelRows) considerGeo(r.vehicle_id, "fuel", r.created_at, r.geo_lat, r.geo_lng);
+  for (const r of tripRows) considerGeo(r.vehicle_id, "trip", r.created_at, r.geo_lat, r.geo_lng);
+  const geoPoints: GeoPoint[] = [...lastByVehicle.values()].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 20);
 
   return {
     orgId,
@@ -173,7 +232,9 @@ export async function loadTodayData(): Promise<TodayData> {
     hoursToday,
     litersCard,
     litersTanker,
+    accruedToday,
     prev,
+    lineup,
     attention,
     geoPoints,
     recentEvents: events,
