@@ -720,10 +720,13 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
   }
 
   // Агрегация начислений/удержаний по договорам одним проходом.
-  const acc = new Map<string, { accrual: number; fuelHold: number; penalty: number; trips: number; hours: number; volume: number }>();
+  // Начисления за рейсы и за часы копятся РАЗДЕЛЬНО: эффективная стоимость
+  // (₸/рейс, ₸/час) считается каждая от своей части, иначе у смешанных
+  // договоров часовые начисления попадают в «стоимость рейса» и наоборот.
+  const acc = new Map<string, { accrualTrips: number; accrualHours: number; fuelHold: number; penalty: number; trips: number; hours: number; volume: number }>();
   const bucket = (cid: string) => {
     let b = acc.get(cid);
-    if (!b) { b = { accrual: 0, fuelHold: 0, penalty: 0, trips: 0, hours: 0, volume: 0 }; acc.set(cid, b); }
+    if (!b) { b = { accrualTrips: 0, accrualHours: 0, fuelHold: 0, penalty: 0, trips: 0, hours: 0, volume: 0 }; acc.set(cid, b); }
     return b;
   };
 
@@ -758,7 +761,7 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     b.trips += 1;
     b.volume += routeVolume.get(t.route_id) ?? 0;
     const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "trip", v.id, v.vehicle_type, aqtobeDate(t.created_at));
-    if (rate != null) { b.accrual += rate; addDayAccrual(aqtobeDate(t.created_at), rate); }
+    if (rate != null) { b.accrualTrips += rate; addDayAccrual(aqtobeDate(t.created_at), rate); }
     else unbilled(v, "no_rate").trips += 1;
   }
   for (const s of shiftsRows) {
@@ -770,7 +773,7 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     const b = bucket(v.contract_id);
     b.hours += hours;
     const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "hour", v.id, v.vehicle_type, s.shift_date);
-    if (rate != null) { b.accrual += rate * hours; addDayAccrual(s.shift_date, rate * hours); }
+    if (rate != null) { b.accrualHours += rate * hours; addDayAccrual(s.shift_date, rate * hours); }
     else unbilled(v, "no_rate").hours += hours;
   }
   for (const f of fuelRows) {
@@ -784,11 +787,17 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
   }
 
   const contracts: ContractMoney[] = (contractsRes.data ?? []).map((c) => {
-    const b = acc.get(c.id) ?? { accrual: 0, fuelHold: 0, penalty: 0, trips: 0, hours: 0, volume: 0 };
-    const accrual = Math.round(b.accrual * 100) / 100;
+    const b = acc.get(c.id) ?? { accrualTrips: 0, accrualHours: 0, fuelHold: 0, penalty: 0, trips: 0, hours: 0, volume: 0 };
+    const accrual = Math.round((b.accrualTrips + b.accrualHours) * 100) / 100;
     const fuelHold = Math.round(b.fuelHold * 100) / 100;
     const penalty = Math.round(b.penalty * 100) / 100;
     const net = Math.round((accrual - fuelHold - penalty) * 100) / 100;
+    // Общедоговорные удержания (ГСМ, штрафы) распределяются между рейсовой и
+    // часовой частью пропорционально начислению — каждая метрика делит СВОЮ часть.
+    const accrualSum = b.accrualTrips + b.accrualHours;
+    const holds = fuelHold + penalty;
+    const netTrips = accrualSum > 0 ? b.accrualTrips - holds * (b.accrualTrips / accrualSum) : 0;
+    const netHours = accrualSum > 0 ? b.accrualHours - holds * (b.accrualHours / accrualSum) : 0;
     return {
       id: c.id,
       number: c.number,
@@ -801,9 +810,9 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
       forecast: Math.round((net / elapsed) * totalDays),
       tripsCount: b.trips,
       hoursSum: b.hours,
-      costPerTrip: b.trips > 0 ? Math.round(net / b.trips) : null,
-      costPerHour: b.hours > 0 ? Math.round(net / b.hours) : null,
-      tengePerM3: b.volume > 0 ? Math.round(net / b.volume) : null,
+      costPerTrip: b.trips > 0 && b.accrualTrips > 0 ? Math.round(netTrips / b.trips) : null,
+      costPerHour: b.hours > 0 && b.accrualHours > 0 ? Math.round(netHours / b.hours) : null,
+      tengePerM3: b.volume > 0 && b.accrualTrips > 0 ? Math.round(netTrips / b.volume) : null,
     };
   });
   contracts.sort((a, b) => a.number.localeCompare(b.number, "ru"));

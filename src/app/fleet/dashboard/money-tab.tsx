@@ -268,10 +268,10 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
               <tr>
                 <th className="px-3 py-2">Подрядчик · договор</th>
                 <th className="px-3 py-2 text-right">Рейсов</th>
-                <th className="px-3 py-2 text-right">₸/рейс</th>
+                <th className="px-3 py-2 text-right" title="Начислено за рейсы минус доля удержаний, делённое на число рейсов. Часовые начисления сюда не входят.">₸/рейс</th>
                 <th className="px-3 py-2 text-right">Часов</th>
-                <th className="px-3 py-2 text-right">₸/час</th>
-                <th className="px-3 py-2 text-right">₸/м³ грунта</th>
+                <th className="px-3 py-2 text-right" title="Начислено за моточасы минус доля удержаний, делённое на часы. Рейсовые начисления сюда не входят.">₸/час</th>
+                <th className="px-3 py-2 text-right" title="Рейсовая часть «к оплате», делённая на кубометры перевезённого грунта (объём — из маршрута).">₸/м³ грунта</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -296,7 +296,9 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
           </table>
         </div>
         <p className="text-xs text-muted-foreground">
-          ₸/м³ — полная стоимость кубометра перевезённого грунта (объём рейса из маршрута) — ключевая метрика себестоимости.
+          ₸/рейс и ₸/час считаются каждая от своей части начислений (рейсовой и часовой) — у смешанных договоров
+          они не пересекаются; удержания ГСМ и штрафы распределены пропорционально. ₸/м³ — рейсовая часть на кубометр
+          перевезённого грунта (объём рейса из маршрута) — ключевая метрика себестоимости.
         </p>
       </section>
 
