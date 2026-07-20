@@ -106,8 +106,8 @@ export function UsersClient({ data }: { data: UsersScreenData }) {
                     onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="password">Пароль *</Label>
-                  <Input id="password" type="text" value={form.password}
+                  <Label htmlFor="password">Пароль * <span className="font-normal text-muted-foreground">(минимум 6 символов)</span></Label>
+                  <Input id="password" type="text" value={form.password} placeholder="минимум 6 символов"
                     onChange={(e) => setForm((s) => ({ ...s, password: e.target.value }))} />
                 </div>
               </>

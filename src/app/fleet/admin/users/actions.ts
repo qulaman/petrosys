@@ -23,10 +23,10 @@ async function requireAdmin(): Promise<
 const roleEnum = z.enum(ROLES);
 
 const createSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6),
-  full_name: z.string().min(1),
-  roles: z.array(roleEnum).min(1),
+  email: z.string().email("Некорректный email"),
+  password: z.string().min(6, "Пароль — минимум 6 символов"),
+  full_name: z.string().min(1, "Укажите ФИО"),
+  roles: z.array(roleEnum).min(1, "Выберите хотя бы одну роль"),
   contractor_id: zUuid.nullable(),
 });
 
@@ -37,7 +37,7 @@ export async function createUserAction(
   if (!gate.ok) return gate;
 
   const p = createSchema.safeParse(input);
-  if (!p.success) return { ok: false, error: "Проверьте поля пользователя" };
+  if (!p.success) return { ok: false, error: p.error.issues[0]?.message ?? "Проверьте поля пользователя" };
   const d = p.data;
   if (d.roles.includes("contractor") && !d.contractor_id)
     return { ok: false, error: "Для роли «Подрядчик» укажите контрагента" };
