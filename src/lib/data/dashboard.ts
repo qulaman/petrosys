@@ -185,6 +185,7 @@ export async function loadTodayData(): Promise<TodayData> {
 
 // =============================== ВКЛАДКА «ТОПЛИВО» ===============================
 export interface DailyIssue {
+  date: string; // yyyy-mm-dd — переход в журнал за день по клику
   label: string; // dd.mm
   card: number;
   tanker: number;
@@ -193,17 +194,33 @@ export interface NormRow {
   vehicle_id: string;
   reg: string;
   actual: number; // л/моточас факт
-  norm: number | null;
-  over: boolean;
+  norm: number; // только машины с заполненным нормативом
+  overPct: number; // +24 = на 24 % выше нормы; отрицательное — ниже
 }
 export interface TopConsumer {
   vehicle_id: string;
   reg: string;
   liters: number;
+  perHour: number | null; // л/моточас (null — нет часов за период)
+  attention: boolean; // открытая аномалия over_norm / fuel_no_work
+}
+export interface FuelSummary {
+  totalLiters: number;
+  litersCard: number;
+  litersTanker: number;
+  vehiclesFueled: number;
+  /** Удержания за ГСМ по договорным ценам, ₸ (0 — цены не заданы/выдач нет). */
+  fuelHoldTenge: number;
+  overCount: number;
+  /** Есть ли вообще нормативы у техники на моточасах (иначе блок норм мёртв). */
+  normFilled: boolean;
 }
 export interface FuelTabData {
   daily: DailyIssue[];
+  summary: FuelSummary;
   norm: NormRow[];
+  /** Работавшая техника на моточасах без норматива — кандидаты на заполнение. */
+  noNormRegs: string[];
   top: TopConsumer[];
 }
 
@@ -222,10 +239,12 @@ const ddmm = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
 
 export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabData> {
   const supabase = await createClient();
-  const [veh, fuelRows, shiftRows] = await Promise.all([
-    supabase.from("vehicles").select("id, reg_number, fuel_norm_per_hour, accounting_type"),
+  const [veh, fuelRows, shiftRows, fuelPricesRes, attentionRes] = await Promise.all([
+    supabase.from("vehicles").select("id, reg_number, fuel_norm_per_hour, accounting_type, contract_id"),
     fetchAll((f, t) => supabase.from("fuel_issues").select("created_at, liters, source_type, vehicle_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
     fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours").gte("shift_date", period.fromDate).lte("shift_date", period.toDate).order("id").range(f, t)),
+    supabase.from("contract_fuel_prices").select("contract_id, price_per_liter, valid_from"),
+    supabase.from("anomalies").select("type, entity_refs").in("status", ["new", "reviewed"]).in("type", ["over_norm", "fuel_no_work"]),
   ]);
 
   const vMap = new Map((veh.data ?? []).map((v) => [v.id, v]));
@@ -241,34 +260,96 @@ export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabDa
   }
   const daily: DailyIssue[] = eachDay(period.fromDate, period.toDate).map((d) => {
     const c = byDay.get(d) ?? { card: 0, tanker: 0 };
-    return { label: ddmm(d), card: c.card, tanker: c.tanker };
+    return { date: d, label: ddmm(d), card: c.card, tanker: c.tanker };
   });
 
-  // 2) расход к нормативу (техника на моточасах)
+  // 2) расход к нормативу (техника на моточасах с заполненным нормативом)
   const litersByVeh = new Map<string, number>();
   for (const r of fuelRows) litersByVeh.set(r.vehicle_id, (litersByVeh.get(r.vehicle_id) ?? 0) + Number(r.liters));
   const hoursByVeh = new Map<string, number>();
   for (const r of shiftRows) hoursByVeh.set(r.vehicle_id, (hoursByVeh.get(r.vehicle_id) ?? 0) + Number(r.hours));
 
   const norm: NormRow[] = [];
+  const noNormRegs: string[] = [];
+  let normFilled = false;
   for (const v of veh.data ?? []) {
     if (v.accounting_type !== "hours") continue;
+    const normVal = v.fuel_norm_per_hour == null ? null : Number(v.fuel_norm_per_hour);
+    if (normVal != null) normFilled = true;
     const hours = hoursByVeh.get(v.id) ?? 0;
     const liters = litersByVeh.get(v.id) ?? 0;
-    if (hours <= 0 && liters <= 0) continue;
-    const actual = hours > 0 ? Math.round((liters / hours) * 10) / 10 : 0;
-    const normVal = v.fuel_norm_per_hour == null ? null : Number(v.fuel_norm_per_hour);
-    norm.push({ vehicle_id: v.id, reg: v.reg_number, actual, norm: normVal, over: normVal != null && actual > normVal });
+    if (hours <= 0 && liters <= 0) continue; // не работала за период
+    if (normVal == null) {
+      noNormRegs.push(v.reg_number);
+      continue;
+    }
+    if (hours <= 0) continue; // литры без часов — территория детектора fuel_no_work
+    const actual = Math.round((liters / hours) * 10) / 10;
+    norm.push({
+      vehicle_id: v.id,
+      reg: v.reg_number,
+      actual,
+      norm: normVal,
+      overPct: Math.round((actual / normVal - 1) * 100),
+    });
   }
-  norm.sort((a, b) => b.actual - a.actual);
+  norm.sort((a, b) => b.overPct - a.overPct);
+  noNormRegs.sort((a, b) => a.localeCompare(b, "ru"));
 
-  // 3) топ потребителей
+  // 3) топ потребителей + флаг «есть открытая аномалия по машине»
+  const attentionVeh = new Set<string>();
+  for (const a of attentionRes.data ?? []) {
+    const refs = (a.entity_refs ?? {}) as { vehicle_id?: string };
+    if (refs.vehicle_id) attentionVeh.add(refs.vehicle_id);
+  }
   const top: TopConsumer[] = [...litersByVeh.entries()]
-    .map(([id, liters]) => ({ vehicle_id: id, reg: vMap.get(id)?.reg_number ?? "—", liters }))
+    .map(([id, liters]) => {
+      const hours = hoursByVeh.get(id) ?? 0;
+      return {
+        vehicle_id: id,
+        reg: vMap.get(id)?.reg_number ?? "—",
+        liters,
+        perHour: hours > 0 ? Math.round((liters / hours) * 10) / 10 : null,
+        attention: attentionVeh.has(id),
+      };
+    })
     .sort((a, b) => b.liters - a.liters)
     .slice(0, 10);
 
-  return { daily, norm, top };
+  // 4) сводка: литры, машины, удержания по договорным ценам ГСМ
+  const fuelPricesByContract = new Map<string, { price: number; valid_from: string }[]>();
+  for (const f of fuelPricesRes.data ?? []) {
+    if (!f.contract_id) continue;
+    (fuelPricesByContract.get(f.contract_id) ?? fuelPricesByContract.set(f.contract_id, []).get(f.contract_id))!
+      .push({ price: Number(f.price_per_liter), valid_from: f.valid_from });
+  }
+  let fuelHoldTenge = 0;
+  let litersCard = 0;
+  let litersTanker = 0;
+  for (const r of fuelRows) {
+    if (r.source_type === "card") litersCard += Number(r.liters);
+    else litersTanker += Number(r.liters);
+    const contractId = vMap.get(r.vehicle_id)?.contract_id;
+    if (!contractId) continue;
+    const price = resolveFuelPrice(fuelPricesByContract.get(contractId) ?? [], aqtobeDate(r.created_at));
+    if (price != null) fuelHoldTenge += price * Number(r.liters);
+  }
+
+  return {
+    daily,
+    summary: {
+      totalLiters: litersCard + litersTanker,
+      litersCard,
+      litersTanker,
+      vehiclesFueled: litersByVeh.size,
+      fuelHoldTenge: Math.round(fuelHoldTenge),
+      overCount: norm.filter((n) => n.overPct > 0).length,
+      normFilled,
+    },
+    norm,
+    noNormRegs,
+    top,
+  };
 }
 
 // =============================== ВКЛАДКА «РАБОТА» ===============================
