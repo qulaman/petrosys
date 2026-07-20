@@ -3,6 +3,8 @@ import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 import { Skeleton } from "@/components/ui/skeleton";
 import { loadTodayData, loadFuelTabData, loadWorkTabData, loadMoneyTabData } from "@/lib/data/dashboard";
+import { loadVolumeTabData } from "@/lib/data/forecast";
+import { VolumeTab } from "./volume-tab";
 import { resolvePeriod, type ResolvedPeriod } from "@/lib/journals/period";
 import { PeriodSelector } from "@/components/period-selector";
 import { DashboardNav } from "./dashboard-nav";
@@ -32,7 +34,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </Suspense>
           }
         />
-        {tab !== "today" ? <PeriodSelector extraParams={{ tab }} /> : null}
+        {tab !== "today" && tab !== "volume" ? <PeriodSelector extraParams={{ tab }} /> : null}
         <Suspense key={`${tab}|${period.fromDate}|${period.toDate}`} fallback={<TabSkeleton />}>
           <TabContent tab={tab} period={period} />
         </Suspense>
@@ -52,6 +54,7 @@ async function TabContent({ tab, period }: { tab: string; period: ResolvedPeriod
   if (tab === "fuel") return <FuelTab data={await loadFuelTabData(period)} />;
   if (tab === "work") return <WorkTab data={await loadWorkTabData(period)} />;
   if (tab === "money") return <MoneyTab data={await loadMoneyTabData(period)} />;
+  if (tab === "volume") return <VolumeTab data={await loadVolumeTabData()} />;
   return <TodayTab data={await loadTodayData()} />;
 }
 

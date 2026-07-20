@@ -4,7 +4,7 @@ import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AlertTriangle, BookOpen, Calculator, ClipboardList, CreditCard, Droplet, FileSignature,
-  FileText, FileType2, Fuel, Home, LayoutDashboard, Loader2, QrCode, Settings,
+  FileText, FileType2, Fuel, Home, LayoutDashboard, Loader2, Mountain, QrCode, Settings,
   SlidersHorizontal, Truck, User, Users, type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,6 +15,7 @@ const ICONS: Record<string, LucideIcon> = {
   tanker: Truck,
   shifts: ClipboardList,
   trips: Truck,
+  volume: Mountain,
   journals: BookOpen,
   settlement: Calculator,
   documents: FileText,
@@ -31,6 +32,8 @@ const ROUTE_ICONS: [string, LucideIcon][] = [
   ["/fleet/fuel/tanker", Fuel],
   ["/fleet/shifts", ClipboardList],
   ["/fleet/trips", Truck],
+  ["/fleet/volume", Mountain],
+  ["/fleet/admin/forecast", Mountain],
   ["/fleet/journals/fuel", Droplet],
   ["/fleet/journals/shifts", ClipboardList],
   ["/fleet/journals/trips", Truck],

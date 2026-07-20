@@ -444,6 +444,50 @@ export type Database = {
           },
         ]
       }
+      forecast_settings: {
+        Row: {
+          availability_coeff: number
+          baseline_date: string
+          baseline_volume_m3: number
+          org_id: string
+          target_date: string | null
+          target_volume_m3: number
+          trips_per_truck_shift: number
+          trucks_per_excavator: number
+          updated_at: string
+        }
+        Insert: {
+          availability_coeff?: number
+          baseline_date?: string
+          baseline_volume_m3?: number
+          org_id?: string
+          target_date?: string | null
+          target_volume_m3?: number
+          trips_per_truck_shift?: number
+          trucks_per_excavator?: number
+          updated_at?: string
+        }
+        Update: {
+          availability_coeff?: number
+          baseline_date?: string
+          baseline_volume_m3?: number
+          org_id?: string
+          target_date?: string | null
+          target_volume_m3?: number
+          trips_per_truck_shift?: number
+          trucks_per_excavator?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forecast_settings_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fuel_cards: {
         Row: {
           card_number: string
@@ -804,6 +848,56 @@ export type Database = {
             columns: ["vehicle_id"]
             isOneToOne: false
             referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      production_facts: {
+        Row: {
+          created_at: string
+          created_by: string
+          day_status: string
+          flow: string | null
+          id: string
+          note: string | null
+          org_id: string
+          shift_type: string | null
+          trips_count: number | null
+          volume_m3: number | null
+          work_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          day_status?: string
+          flow?: string | null
+          id?: string
+          note?: string | null
+          org_id?: string
+          shift_type?: string | null
+          trips_count?: number | null
+          volume_m3?: number | null
+          work_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          day_status?: string
+          flow?: string | null
+          id?: string
+          note?: string | null
+          org_id?: string
+          shift_type?: string | null
+          trips_count?: number | null
+          volume_m3?: number | null
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_facts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]

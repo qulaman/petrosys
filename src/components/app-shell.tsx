@@ -14,6 +14,7 @@ const NAV: (NavItem & { roles: Role[] })[] = [
   { href: "/fleet/fuel/issue", label: "Выдача", icon: "fuel", roles: ["fueler", "admin"] },
   { href: "/fleet/fuel/tanker", label: "Бензовоз", icon: "tanker", roles: ["fueler", "admin"] },
   { href: "/fleet/shifts", label: "Табель", icon: "shifts", roles: ["itr", "admin"] },
+  { href: "/fleet/volume", label: "Объём", icon: "volume", roles: ["itr", "office", "admin"] },
   { href: "/fleet/trips", label: "Рейсы", icon: "trips", roles: ["checker", "admin"] },
   { href: "/fleet/journals", label: "Журналы", icon: "journals", roles: ["office", "admin"] },
   { href: "/fleet/office/settlement", label: "Закрытие", icon: "settlement", roles: ["office", "admin"] },

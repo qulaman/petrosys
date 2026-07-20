@@ -21,7 +21,7 @@ const admin = createClient(URL_, SR);
 
 // 1. Аноним не видит ничего
 const anon = createClient(URL_, ANON);
-for (const t of ["profiles", "fuel_issues", "vehicles", "contracts", "anomalies"]) {
+for (const t of ["profiles", "fuel_issues", "vehicles", "contracts", "anomalies", "production_facts"]) {
   const { data } = await anon.from(t).select("id").limit(5);
   check(`аноним не видит ${t}`, (data ?? []).length === 0);
 }
@@ -69,6 +69,12 @@ const lu = await ctr.from("trip_lineups").select("id");
 check("подрядчик не видит вывод на линию", (lu.data ?? []).length === 0);
 const luIns = await ctr.from("trip_lineups").insert({ work_date: "2026-01-01", shift_type: "day" });
 check("подрядчик не может создать вывод на линию", !!luIns.error);
+const pf = await ctr.from("production_facts").select("id").limit(3);
+check("подрядчик не видит сводки объёмов", (pf.data ?? []).length === 0);
+const pfIns = await ctr.from("production_facts").insert({ work_date: "2026-01-01", flow: "pit", volume_m3: 1 });
+check("подрядчик не может создать сводку объёмов", !!pfIns.error);
+const fs_ = await ctr.from("forecast_settings").select("org_id");
+check("подрядчик не видит параметры прогноза", (fs_.data ?? []).length === 0);
 
 await admin.auth.admin.deleteUser(cu.data.user.id);
 await admin.from("vehicles").delete().eq("id", tv.data.id);

@@ -1,13 +1,14 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
-import { Activity, AlertTriangle, Droplet, Loader2, Timer, Wallet, type LucideIcon } from "lucide-react";
+import { Activity, AlertTriangle, Droplet, Loader2, Mountain, Timer, Wallet, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TABS: { key: string; label: string; icon: LucideIcon }[] = [
   { key: "today", label: "Сегодня", icon: Activity },
   { key: "fuel", label: "Топливо", icon: Droplet },
   { key: "work", label: "Работа", icon: Timer },
+  { key: "volume", label: "Объём", icon: Mountain },
   { key: "money", label: "Подрядчики и деньги", icon: Wallet },
 ];
 

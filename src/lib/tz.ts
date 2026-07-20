@@ -7,3 +7,8 @@ export function aqtobeDate(iso: string): string {
     day: "2-digit",
   }).format(new Date(iso));
 }
+
+/** Сегодняшняя дата (yyyy-mm-dd) в поясе объекта Asia/Aqtobe. */
+export function aqtobeToday(): string {
+  return aqtobeDate(new Date().toISOString());
+}
