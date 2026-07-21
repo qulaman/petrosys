@@ -18,7 +18,7 @@ import { fmtTime } from "@/lib/format";
 import { driverPoolFor } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { TripsScreenData } from "@/lib/data/trips";
-import { addLineupVehicle, closeTripJournal, createLineup, createTrip, deleteTrip, removeLineupVehicle, reopenTripJournal } from "./actions";
+import { addLineupVehicle, closeTripJournal, createLineup, createTrip, deleteShiftTrips, deleteTrip, deleteTrips, removeLineupVehicle, reopenTripJournal } from "./actions";
 
 const ROUTE_KEY = "qo-trip-route";
 
@@ -68,6 +68,9 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   // Двухэтапный ввод: экран проверки карточки смены и подпись мастера на закрытии.
   const [reviewOpen, setReviewOpen] = useState(false);
   const [signClose, setSignClose] = useState(false);
+  // Пакетное удаление в ленте: режим выбора + отмеченные записи.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const tripsByVehicle = useMemo(() => {
     const m = new Map<string, { count: number; lastId: string }>();
     for (const t of data.shiftTrips) {
@@ -500,7 +503,57 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
 
       {/* Лента: неотправленные + недавние подтверждённые */}
       <section className="flex flex-col gap-2">
-        <p className="text-sm font-medium">Последние рейсы</p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">Последние рейсы</p>
+          <Button
+            variant={selectMode ? "default" : "ghost"}
+            size="sm"
+            onClick={() => { setSelectMode((v) => !v); setSelected(new Set()); }}
+          >
+            {selectMode ? "Готово" : "Выбрать"}
+          </Button>
+        </div>
+        {selectMode ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={pending || selected.size === 0}
+              onClick={() =>
+                act(async () => {
+                  const res = await deleteTrips([...selected]);
+                  if (res.ok) { setSelected(new Set()); if (res.error) toast.info(res.error); }
+                  return res;
+                }, "Выбранные рейсы удалены")
+              }
+            >
+              <Trash2 className="size-4" /> Удалить выбранные ({selected.size})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending || shiftTrips.length === 0}
+              onClick={() =>
+                toast(`Удалить все рейсы смены (${shiftTrips.length})?`, {
+                  description: "Карточка останется, машины на линии сохранятся.",
+                  action: {
+                    label: "Удалить все",
+                    onClick: () =>
+                      act(async () => {
+                        const res = await deleteShiftTrips(lineup.id);
+                        if (res.ok) { setSelected(new Set()); setSelectMode(false); if (res.error) toast.info(res.error); }
+                        return res;
+                      }, "Рейсы смены удалены"),
+                  },
+                  cancel: { label: "Отмена", onClick: () => {} },
+                  duration: 8000,
+                })
+              }
+            >
+              <Trash2 className="size-4" /> Удалить все рейсы смены ({shiftTrips.length})
+            </Button>
+          </div>
+        ) : null}
         <div className="flex flex-col divide-y rounded-lg border">
           {entries.map((e) => (
             <div key={e.id} className="flex items-center gap-2 p-3 text-sm">
@@ -517,9 +570,28 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
             </div>
           ))}
           {recentTrips.map((t) => {
+            const isSelected = selected.has(t.id);
             return (
-              <div key={t.id} className="flex items-center gap-2 p-3 text-sm">
-                <Check className="size-4 text-green-600" />
+              <div
+                key={t.id}
+                className={`flex items-center gap-2 p-3 text-sm ${isSelected ? "bg-destructive/10" : ""}`}
+                onClick={
+                  selectMode
+                    ? () =>
+                        setSelected((s) => {
+                          const next = new Set(s);
+                          if (next.has(t.id)) next.delete(t.id);
+                          else next.add(t.id);
+                          return next;
+                        })
+                    : undefined
+                }
+              >
+                {selectMode ? (
+                  <input type="checkbox" readOnly checked={isSelected} className="size-5 accent-destructive" />
+                ) : (
+                  <Check className="size-4 text-green-600" />
+                )}
                 <span className="flex-1">
                   {vehById.get(t.vehicle_id)?.reg_number ?? "—"}
                   <span className="ml-2 text-xs text-muted-foreground">
@@ -527,19 +599,20 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
                   </span>
                 </span>
                 <span className="text-xs text-muted-foreground">{fmtTime(t.at)}</span>
-                {/* Кнопка всегда видна: сервер сам решает — учётчику 5 минут, офису всегда. */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1 px-2 text-destructive"
-                  onClick={async () => {
-                    const res = await deleteTrip(t.id);
-                    if (res.ok) { toast.success("Рейс отменён"); router.refresh(); }
-                    else { devError("deleteTrip", res.error); toast.error(res.error ?? "Ошибка"); }
-                  }}
-                >
-                  <Trash2 className="size-4" /> Отменить
-                </Button>
+                {!selectMode ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-destructive"
+                    onClick={async () => {
+                      const res = await deleteTrip(t.id);
+                      if (res.ok) { toast.success("Рейс отменён"); router.refresh(); }
+                      else { devError("deleteTrip", res.error); toast.error(res.error ?? "Ошибка"); }
+                    }}
+                  >
+                    <Trash2 className="size-4" /> Отменить
+                  </Button>
+                ) : null}
               </div>
             );
           })}

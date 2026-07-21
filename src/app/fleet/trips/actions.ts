@@ -204,6 +204,48 @@ export async function deleteTrip(id: string): Promise<{ ok: boolean; error?: str
   return { ok: true };
 }
 
+/** Пакетное удаление выбранных рейсов (RLS: свои в открытой карточке / офис — любые). */
+export async function deleteTrips(ids: string[]): Promise<{ ok: boolean; deleted?: number; error?: string }> {
+  const p = z.array(zUuid).min(1).max(500).safeParse(ids);
+  if (!p.success) return { ok: false, error: "Ничего не выбрано" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("trip_records").delete().in("id", p.data).select("id");
+  if (error) {
+    devError("deleteTrips", error);
+    return { ok: false, error: error.message };
+  }
+  const deleted = data?.length ?? 0;
+  if (!deleted) return { ok: false, error: "Карточка смены уже закрыта — изменения только через офис" };
+  revalidatePath("/fleet/trips");
+  if (deleted < p.data.length)
+    return { ok: true, deleted, error: `Удалено ${deleted} из ${p.data.length} — остальные записаны другим учётчиком или смена закрыта` };
+  return { ok: true, deleted };
+}
+
+/** Удаление ВСЕХ рейсов карточки смены (RLS ограничит учётчика своими записями). */
+export async function deleteShiftTrips(lineupId: string): Promise<{ ok: boolean; deleted?: number; error?: string }> {
+  const p = zUuid.safeParse(lineupId);
+  if (!p.success) return { ok: false, error: "Неверный id" };
+
+  const supabase = await createClient();
+  const { count: total } = await supabase
+    .from("trip_records")
+    .select("id", { count: "exact", head: true })
+    .eq("lineup_id", p.data);
+  const { data, error } = await supabase.from("trip_records").delete().eq("lineup_id", p.data).select("id");
+  if (error) {
+    devError("deleteShiftTrips", error);
+    return { ok: false, error: error.message };
+  }
+  const deleted = data?.length ?? 0;
+  if (!deleted) return { ok: false, error: "Удалять нечего — либо карточка уже закрыта" };
+  revalidatePath("/fleet/trips");
+  if (total && deleted < total)
+    return { ok: true, deleted, error: `Удалено ${deleted} из ${total} — записи других учётчиков может удалить офис` };
+  return { ok: true, deleted };
+}
+
 // -----------------------------------------------------------------------------
 // Закрытие карточки смены: мастер проверил рейсы, подписал, подтвердил.
 // -----------------------------------------------------------------------------
