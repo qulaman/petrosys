@@ -123,6 +123,8 @@ export interface TripJournalRow {
   route_id: string;
   has_signature: boolean;
   geo: string | null;
+  /** Карточка смены ещё не закрыта мастером — рейс черновой, в деньги не идёт. */
+  draft: boolean;
 }
 
 export async function loadTripJournal(f: JournalFilters): Promise<TripJournalRow[]> {
@@ -131,22 +133,24 @@ export async function loadTripJournal(f: JournalFilters): Promise<TripJournalRow
   const rowsAll = fetchAll((from, to) => {
     let q = supabase
       .from("trip_records")
-      .select("id, created_at, vehicle_id, driver_id, route_id, driver_signature_url, geo_lat, geo_lng")
+      .select("id, created_at, vehicle_id, driver_id, route_id, driver_signature_url, geo_lat, geo_lng, lineup_id")
       .gte("created_at", f.fromISO)
       .lt("created_at", f.toISO);
     if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
     return q.order("created_at", { ascending: false }).order("id").range(from, to);
   });
 
-  const [veh, drv, routes, rows] = await Promise.all([
+  const [veh, drv, routes, openLineups, rows] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, contractor_id"),
     supabase.from("drivers").select("id, full_name"),
     supabase.from("routes").select("id, name"),
+    supabase.from("trip_lineups").select("id").eq("status", "open"),
     rowsAll,
   ]);
   const vMap = new Map((veh.data ?? []).map((v) => [v.id, v]));
   const dMap = new Map((drv.data ?? []).map((d) => [d.id, d.full_name]));
   const rMap = new Map((routes.data ?? []).map((r) => [r.id, r.name]));
+  const openIds = new Set((openLineups.data ?? []).map((l) => l.id));
 
   const data = byContractor(rows, f.contractorId, veh.data ?? []);
   return data.map((r) => ({
@@ -159,6 +163,7 @@ export async function loadTripJournal(f: JournalFilters): Promise<TripJournalRow
     route_id: r.route_id,
     has_signature: !!r.driver_signature_url,
     geo: r.geo_lat != null && r.geo_lng != null ? `${r.geo_lat}, ${r.geo_lng}` : null,
+    draft: !!r.lineup_id && openIds.has(r.lineup_id),
   }));
 }
 

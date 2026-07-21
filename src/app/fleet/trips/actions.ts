@@ -150,18 +150,24 @@ export async function createTrip(input: z.infer<typeof schema>): Promise<Result>
   const d = p.data;
 
   const supabase = await createClient();
-  const { data: onLine } = await supabase
-    .from("trip_lineup_vehicles")
-    .select("id")
-    .eq("lineup_id", d.lineup_id)
-    .eq("vehicle_id", d.vehicle_id)
-    .maybeSingle();
+  const [{ data: onLine }, { data: lineup }] = await Promise.all([
+    supabase
+      .from("trip_lineup_vehicles")
+      .select("id")
+      .eq("lineup_id", d.lineup_id)
+      .eq("vehicle_id", d.vehicle_id)
+      .maybeSingle(),
+    supabase.from("trip_lineups").select("status").eq("id", d.lineup_id).single(),
+  ]);
   if (!onLine)
     return { ok: false, error: "Машина не выведена на линию — сначала выведите её на линию" };
+  if (lineup?.status === "closed")
+    return { ok: false, error: "Смена уже закрыта мастером — рейс не добавлен" };
 
   const { data, error } = await supabase
     .from("trip_records")
     .insert({
+      lineup_id: d.lineup_id,
       route_id: d.route_id,
       vehicle_id: d.vehicle_id,
       driver_id: d.driver_id,
@@ -181,9 +187,9 @@ export async function createTrip(input: z.infer<typeof schema>): Promise<Result>
 }
 
 /**
- * Отмена записи: учётчик — свою в 5-минутном окне, офис/админ — любую
- * (обе политики в RLS). RLS фильтрует молча, поэтому различаем «удалено»
- * и «право не дало» по числу удалённых строк.
+ * Отмена записи: учётчик — свою в ОТКРЫТОЙ карточке смены, офис/админ — любую
+ * (политики в RLS). RLS фильтрует молча, поэтому различаем «удалено» и
+ * «право не дало» по числу удалённых строк.
  */
 export async function deleteTrip(id: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
@@ -193,7 +199,72 @@ export async function deleteTrip(id: string): Promise<{ ok: boolean; error?: str
     return { ok: false, error: error.message };
   }
   if (!data?.length)
-    return { ok: false, error: "Отменить можно в течение 5 минут после записи — либо обратитесь в офис" };
+    return { ok: false, error: "Карточка смены уже закрыта — изменения только через офис" };
+  revalidatePath("/fleet/trips");
+  return { ok: true };
+}
+
+// -----------------------------------------------------------------------------
+// Закрытие карточки смены: мастер проверил рейсы, подписал, подтвердил.
+// -----------------------------------------------------------------------------
+const closeSchema = z.object({
+  lineup_id: zUuid,
+  signature_path: z.string().min(1, "Нет подписи мастера"),
+});
+
+export async function closeTripJournal(
+  input: z.infer<typeof closeSchema>,
+): Promise<Result> {
+  const p = closeSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: IS_DEV ? p.error.message : "Нет подписи мастера" };
+  const d = p.data;
+
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("trip_records")
+    .select("id", { count: "exact", head: true })
+    .eq("lineup_id", d.lineup_id);
+  if (!count)
+    return { ok: false, error: "В карточке нет ни одного рейса — закрывать нечего" };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data, error } = await supabase
+    .from("trip_lineups")
+    .update({
+      status: "closed",
+      master_signature_url: d.signature_path,
+      closed_by: user?.id ?? null,
+      closed_at: new Date().toISOString(),
+    })
+    .eq("id", d.lineup_id)
+    .eq("status", "open")
+    .select("id");
+  if (error) {
+    devError("closeTripJournal", error);
+    return { ok: false, error: error.message };
+  }
+  if (!data?.length) return { ok: false, error: "Карточка уже закрыта" };
+  revalidatePath("/fleet/trips");
+  return { ok: true };
+}
+
+/** Переоткрытие закрытой карточки — офис/админ (RLS не пустит учётчика). */
+export async function reopenTripJournal(lineupId: string): Promise<Result> {
+  const p = zUuid.safeParse(lineupId);
+  if (!p.success) return { ok: false, error: "Неверный id" };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("trip_lineups")
+    .update({ status: "open", master_signature_url: null, closed_by: null, closed_at: null })
+    .eq("id", p.data)
+    .eq("status", "closed")
+    .select("id");
+  if (error) {
+    devError("reopenTripJournal", error);
+    return { ok: false, error: error.message };
+  }
+  if (!data?.length)
+    return { ok: false, error: "Переоткрыть может только офис или администратор" };
   revalidatePath("/fleet/trips");
   return { ok: true };
 }

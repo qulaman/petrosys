@@ -5,8 +5,10 @@ import { aqtobeDate } from "@/lib/tz";
 import type { ResolvedPeriod } from "@/lib/journals/period";
 import {
   loadClosedJournalIds,
+  loadOpenLineupIds,
   resolveFuelPrice,
   resolveRate,
+  tripCounted,
   type RatePriceRow,
 } from "@/lib/data/money";
 
@@ -122,11 +124,14 @@ export async function loadContractorAvr(
     fuelByContract.set(p.contract_id, arr);
   }
 
-  const [trips, shiftsRaw, fuel] = await Promise.all([
-    fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at").in("vehicle_id", vehIds).gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
+  const [tripsRaw, shiftsRaw, fuel, openLineups] = await Promise.all([
+    fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at, lineup_id").in("vehicle_id", vehIds).gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
     fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours, shift_date, journal_id").in("vehicle_id", vehIds).gte("shift_date", period.fromDate).lte("shift_date", period.toDate).order("id").range(f, t)),
     fetchAll((f, t) => supabase.from("fuel_issues").select("vehicle_id, liters, source_type, created_at").in("vehicle_id", vehIds).gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
+    loadOpenLineupIds(supabase),
   ]);
+  // Рейсы открытых карточек смен — черновик, в АВР не идут.
+  const trips = tripsRaw.filter((t) => tripCounted(t, openLineups));
 
   // Деньги считают только закрытые журналы (legacy-записи без журнала — считаются).
   const journalIds = [...new Set(shiftsRaw.map((s) => s.journal_id).filter((x): x is string => !!x))];

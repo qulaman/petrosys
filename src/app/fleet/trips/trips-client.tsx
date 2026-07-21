@@ -18,7 +18,7 @@ import { fmtTime } from "@/lib/format";
 import { driverPoolFor } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { TripsScreenData } from "@/lib/data/trips";
-import { addLineupVehicle, createLineup, createTrip, deleteTrip, removeLineupVehicle } from "./actions";
+import { addLineupVehicle, closeTripJournal, createLineup, createTrip, deleteTrip, removeLineupVehicle, reopenTripJournal } from "./actions";
 
 const ROUTE_KEY = "qo-trip-route";
 
@@ -49,7 +49,7 @@ function getGeoFast(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export function TripsClient({ data }: { data: TripsScreenData }) {
-  const { routes, vehicles, drivers, lastDriverByVehicle, recentTrips, lineup, lineupVehicleIds, previous, shiftStats } = data;
+  const { routes, vehicles, drivers, lastDriverByVehicle, recentTrips, lineup, lineupVehicleIds, previous, shiftStats, shiftTrips, canReopen } = data;
   const router = useRouter();
   const pathname = usePathname();
 
@@ -65,6 +65,17 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   // повторный рейс той же машины в коротком окне — только с подтверждением.
   const [enqueueBusy, setEnqueueBusy] = useState(false);
   const lastEnqueueRef = useRef<Map<string, number>>(new Map());
+  // Двухэтапный ввод: экран проверки карточки смены и подпись мастера на закрытии.
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [signClose, setSignClose] = useState(false);
+  const tripsByVehicle = useMemo(() => {
+    const m = new Map<string, { count: number; lastId: string }>();
+    for (const t of data.shiftTrips) {
+      const cur = m.get(t.vehicle_id);
+      m.set(t.vehicle_id, { count: (cur?.count ?? 0) + 1, lastId: t.id });
+    }
+    return m;
+  }, [data.shiftTrips]);
 
   // Прогрев разрешения геолокации при открытии экрана: промпт появляется в
   // спокойный момент, а не посреди фиксации первого рейса.
@@ -300,7 +311,47 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   }
 
   // ---------------------------------------------------------------------------
-  // Этап 2 — фиксация рейсов по машинам на линии
+  // Карточка закрыта: read-only сводка, ввод заблокирован
+  // ---------------------------------------------------------------------------
+  if (lineup.status === "closed") {
+    return (
+      <div className="mx-auto flex w-full max-w-md flex-col gap-4">
+        <ShiftPicker date={data.date} shift={data.shift} onChange={setParams} />
+        <div className="flex items-center gap-2 rounded-lg border border-green-600 bg-green-600/10 p-3">
+          <Check className="size-5 text-green-600" />
+          <div className="flex-1">
+            <p className="font-semibold">Смена закрыта мастером</p>
+            <p className="text-xs text-muted-foreground">
+              Рейсов подтверждено: {shiftTrips.length} · записи в расчётах
+            </p>
+          </div>
+          {canReopen ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => act(() => reopenTripJournal(lineup.id), "Карточка переоткрыта")}
+            >
+              Переоткрыть
+            </Button>
+          ) : null}
+        </div>
+        <ShiftSummary
+          tripsByVehicle={tripsByVehicle}
+          vehicles={vehicles}
+          lineupVehicleIds={lineupVehicleIds}
+        />
+        {!canReopen ? (
+          <p className="text-xs text-muted-foreground">
+            Изменения после закрытия — только через офис (переоткрытие карточки).
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Этап 2 — фиксация рейсов по машинам на линии (карточка открыта, черновик)
   // ---------------------------------------------------------------------------
   const hasUnsent = pendingCount > 0;
   return (
@@ -325,6 +376,49 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
             <RotateCw className="size-4" /> Повторить
           </Button>
         </div>
+      ) : null}
+
+      {/* Карточка смены: черновик до подписи мастера */}
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+        <div>
+          <p className="text-xs text-muted-foreground">Карточка смены — черновик</p>
+          <p className="font-semibold tabular-nums">Рейсов за смену: {shiftTrips.length}</p>
+        </div>
+        <Button
+          variant={reviewOpen ? "default" : "outline"}
+          onClick={() => setReviewOpen((v) => !v)}
+        >
+          <Check className="size-4" /> Проверить и закрыть
+        </Button>
+      </div>
+
+      {reviewOpen ? (
+        <section className="flex flex-col gap-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Проверка карточки: рейсы по машинам</p>
+          <ShiftSummary
+            tripsByVehicle={tripsByVehicle}
+            vehicles={vehicles}
+            lineupVehicleIds={lineupVehicleIds}
+            editable
+            busy={pending || enqueueBusy}
+            onPlus={(vid) => proceedRecord(vid)}
+            onMinus={async (lastId) => {
+              const res = await deleteTrip(lastId);
+              if (res.ok) { toast.success("Рейс убран"); router.refresh(); }
+              else toast.error(res.error ?? "Ошибка");
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            После подписи рейсы попадут в расчёты и АВР; правки — только через офис.
+          </p>
+          <Button
+            className="h-12"
+            disabled={pending || shiftTrips.length === 0}
+            onClick={() => setSignClose(true)}
+          >
+            Подписать и закрыть смену ({shiftTrips.length} рейсов)
+          </Button>
+        </section>
       ) : null}
 
       <Button className="h-20 text-xl" onClick={() => setShowQr(true)}>
@@ -476,6 +570,80 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
           onCancel={() => setPendingSig(null)}
         />
       ) : null}
+
+      {/* Подпись мастера — закрытие карточки смены */}
+      {signClose ? (
+        <SignaturePad
+          signerName="Мастер — закрытие смены"
+          onDone={async (dataUrl) => {
+            setSignClose(false);
+            try {
+              const path = await uploadSignature(data.orgId, dataUrl);
+              act(() => closeTripJournal({ lineup_id: lineup.id, signature_path: path }), "Смена закрыта — рейсы в расчётах");
+              setReviewOpen(false);
+            } catch (err) {
+              devError("close-shift-signature", err);
+              toast.error("Не удалось загрузить подпись");
+            }
+          }}
+          onCancel={() => setSignClose(false)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** Сводка карточки смены: рейсы по машинам, в режиме проверки — с корректировкой ±. */
+function ShiftSummary({
+  tripsByVehicle,
+  vehicles,
+  lineupVehicleIds,
+  editable = false,
+  busy = false,
+  onPlus,
+  onMinus,
+}: {
+  tripsByVehicle: Map<string, { count: number; lastId: string }>;
+  vehicles: TripsScreenData["vehicles"];
+  lineupVehicleIds: string[];
+  editable?: boolean;
+  busy?: boolean;
+  onPlus?: (vehicleId: string) => void;
+  onMinus?: (lastTripId: string) => void;
+}) {
+  const ids = new Set([...lineupVehicleIds, ...tripsByVehicle.keys()]);
+  const rows = vehicles
+    .filter((v) => ids.has(v.id))
+    .map((v) => ({ v, stat: tripsByVehicle.get(v.id) }))
+    .sort((a, b) => (b.stat?.count ?? 0) - (a.stat?.count ?? 0) || a.v.reg_number.localeCompare(b.v.reg_number, "ru"));
+  const total = [...tripsByVehicle.values()].reduce((s, x) => s + x.count, 0);
+
+  return (
+    <div className="flex flex-col divide-y rounded-lg border">
+      {rows.map(({ v, stat }) => (
+        <div key={v.id} className="flex items-center gap-2 p-2.5 text-sm">
+          <span className="flex-1 font-medium">{v.reg_number}</span>
+          {editable && stat ? (
+            <Button variant="outline" size="icon" className="size-9" disabled={busy} aria-label="Убрать рейс"
+              onClick={() => onMinus?.(stat.lastId)}>
+              −
+            </Button>
+          ) : null}
+          <span className={`w-10 text-center text-lg font-bold tabular-nums ${stat ? "" : "text-muted-foreground"}`}>
+            {stat?.count ?? 0}
+          </span>
+          {editable ? (
+            <Button variant="outline" size="icon" className="size-9" disabled={busy} aria-label="Добавить рейс"
+              onClick={() => onPlus?.(v.id)}>
+              +
+            </Button>
+          ) : null}
+        </div>
+      ))}
+      <div className="flex items-center justify-between p-2.5 text-sm font-semibold">
+        <span>Итого рейсов</span>
+        <span className="tabular-nums">{total}</span>
+      </div>
     </div>
   );
 }

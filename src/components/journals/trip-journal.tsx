@@ -97,7 +97,14 @@ export function TripJournal({
             {shown.map((r) => (
               <tr key={r.id} className="hover:bg-accent/40">
                 <td className="whitespace-nowrap px-3 py-2">{fmtDateTime(r.at)}</td>
-                <td className="px-3 py-2 font-medium">{r.reg}</td>
+                <td className="px-3 py-2 font-medium">
+                  {r.reg}
+                  {r.draft ? (
+                    <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-500">
+                      черновик
+                    </span>
+                  ) : null}
+                </td>
                 <td className="px-3 py-2">{r.driver}</td>
                 <td className="px-3 py-2">{r.route}</td>
                 <td className="px-3 py-2">{r.has_signature ? "да" : "—"}</td>

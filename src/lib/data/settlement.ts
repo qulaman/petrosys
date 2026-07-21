@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { aqtobeDate } from "@/lib/tz";
 import type { ResolvedPeriod } from "@/lib/journals/period";
-import { loadClosedJournalIds, resolveFuelPrice, resolveRate, type RatePriceRow } from "@/lib/data/money";
+import { loadClosedJournalIds, loadOpenLineupIds, resolveFuelPrice, resolveRate, tripCounted, type RatePriceRow } from "@/lib/data/money";
 
 // Реэкспорт для существующих импортёров (docx/xlsx-билдеры и т.п.).
 export { resolveRate, type RatePriceRow };
@@ -100,14 +100,18 @@ export async function loadSettlement(
   const noVeh = vehIds.length ? vehIds : ["00000000-0000-0000-0000-000000000000"];
 
   // Волна 2 — записи периода по машинам договора (fetchAll — без потолка 1000 строк) + контрагент.
-  const [trips, shiftsRaw, fuel, contractorRes] =
+  const [tripsRaw, shiftsRaw, fuel, contractorRes, openLineups] =
     await Promise.all([
-      fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at").in("vehicle_id", noVeh).gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
+      fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at, lineup_id").in("vehicle_id", noVeh).gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours, shift_date, journal_id").in("vehicle_id", noVeh).gte("shift_date", period.fromDate).lte("shift_date", period.toDate).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("fuel_issues").select("vehicle_id, liters, created_at").in("vehicle_id", noVeh).gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
       supabase.from("contractors").select("name, vat_payer").eq("id", contract.contractor_id).single(),
+      loadOpenLineupIds(supabase),
     ]);
   const contractor = contractorRes.data;
+
+  // Рейсы открытых карточек смен — черновик мастера, в деньги не идут.
+  const trips = tripsRaw.filter((t) => tripCounted(t, openLineups));
 
   // В расчёт идут только смены из ЗАКРЫТЫХ журналов (черновики не оплачиваются).
   // Записи без журнала (созданные до ввода журналов) считаются для совместимости.

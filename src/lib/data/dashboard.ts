@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { resolvePeriod, type ResolvedPeriod } from "@/lib/journals/period";
-import { loadClosedJournalIds, resolveFuelPrice, resolveRate, type RatePriceRow } from "@/lib/data/money";
+import { loadClosedJournalIds, loadOpenLineupIds, resolveFuelPrice, resolveRate, tripCounted, type RatePriceRow } from "@/lib/data/money";
 import { aqtobeDate } from "@/lib/tz";
 
 export type EventKind = "fuel" | "trip" | "shift";
@@ -691,7 +691,7 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
       supabase.from("vehicles").select("id, reg_number, vehicle_type, contract_id"),
       fetchAll((f, t) => supabase.from("price_list").select("contract_id, unit, vehicle_type, vehicle_id, price, valid_from").order("id").range(f, t)),
       supabase.from("contract_fuel_prices").select("contract_id, price_per_liter, valid_from"),
-      fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at, route_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
+      fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at, route_id, lineup_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours, shift_date, journal_id").gte("shift_date", period.fromDate).lte("shift_date", period.toDate).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("fuel_issues").select("vehicle_id, liters, created_at").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
       supabase.from("penalties").select("contract_id, amount").is("settled_in_period", null),
@@ -699,9 +699,14 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     ]);
   const routeVolume = new Map((routesRes.data ?? []).map((r) => [r.id, r.volume_m3 == null ? null : Number(r.volume_m3)]));
 
-  // Волна 2 — статусы журналов смен (оплачиваются только закрытые).
+  // Волна 2 — статусы журналов смен (оплачиваются только закрытые) и открытых
+  // карточек рейсов (их рейсы — черновик, в деньги не идут).
   const journalIds = [...new Set(shiftsRows.map((s) => s.journal_id).filter((x): x is string => !!x))];
-  const closedJournals = await loadClosedJournalIds(supabase, journalIds);
+  const [closedJournals, openLineups] = await Promise.all([
+    loadClosedJournalIds(supabase, journalIds),
+    loadOpenLineupIds(supabase),
+  ]);
+  const countedTrips = trips.filter((t) => tripCounted(t, openLineups));
 
   const contractorById = new Map((contractorsRes.data ?? []).map((c) => [c.id, c]));
   const contractById = new Map((contractsRes.data ?? []).map((c) => [c.id, c]));
@@ -753,7 +758,7 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
   const accrualByDay = new Map<string, number>();
   const addDayAccrual = (day: string, amount: number) => accrualByDay.set(day, (accrualByDay.get(day) ?? 0) + amount);
 
-  for (const t of trips) {
+  for (const t of countedTrips) {
     const v = vehById.get(t.vehicle_id);
     if (!v) continue;
     if (!v.contract_id) { unbilled(v, "no_contract").trips += 1; continue; }

@@ -1344,27 +1344,39 @@ export type Database = {
       }
       trip_lineups: {
         Row: {
+          closed_at: string | null
+          closed_by: string | null
           created_at: string
           created_by: string
           id: string
+          master_signature_url: string | null
           org_id: string
           shift_type: string
+          status: string
           work_date: string
         }
         Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
           created_at?: string
           created_by?: string
           id?: string
+          master_signature_url?: string | null
           org_id?: string
           shift_type: string
+          status?: string
           work_date: string
         }
         Update: {
+          closed_at?: string | null
+          closed_by?: string | null
           created_at?: string
           created_by?: string
           id?: string
+          master_signature_url?: string | null
           org_id?: string
           shift_type?: string
+          status?: string
           work_date?: string
         }
         Relationships: [
@@ -1385,6 +1397,7 @@ export type Database = {
           geo_lat: number | null
           geo_lng: number | null
           id: string
+          lineup_id: string | null
           org_id: string
           recorded_by: string
           route_id: string
@@ -1398,6 +1411,7 @@ export type Database = {
           geo_lat?: number | null
           geo_lng?: number | null
           id?: string
+          lineup_id?: string | null
           org_id?: string
           recorded_by?: string
           route_id: string
@@ -1411,6 +1425,7 @@ export type Database = {
           geo_lat?: number | null
           geo_lng?: number | null
           id?: string
+          lineup_id?: string | null
           org_id?: string
           recorded_by?: string
           route_id?: string
@@ -1418,6 +1433,13 @@ export type Database = {
           vehicle_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "trip_records_lineup_id_fkey"
+            columns: ["lineup_id"]
+            isOneToOne: false
+            referencedRelation: "trip_lineups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "trip_records_driver_id_fkey"
             columns: ["driver_id"]

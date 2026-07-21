@@ -47,6 +47,23 @@ export function resolveFuelPrice(prices: FuelPriceRow[], date: string): number |
 }
 
 /**
+ * Id ОТКРЫТЫХ карточек смен рейсов: их рейсы — черновик мастера и в деньги
+ * не идут. Записи с lineup_id=null — legacy (до двухэтапного ввода), считаются.
+ */
+export async function loadOpenLineupIds(supabase: Db): Promise<Set<string>> {
+  const { data } = await supabase.from("trip_lineups").select("id").eq("status", "open");
+  return new Set((data ?? []).map((l) => l.id));
+}
+
+/** Фильтр денежного контура: рейс учитывается, если карточка закрыта или её нет (legacy). */
+export function tripCounted(
+  trip: { lineup_id: string | null },
+  openLineups: Set<string>,
+): boolean {
+  return !trip.lineup_id || !openLineups.has(trip.lineup_id);
+}
+
+/**
  * Id закрытых журналов смен из переданного списка (черновики не оплачиваются;
  * записи с journal_id=null — legacy, считаются всегда). Чанки — чтобы не упереться
  * в длину URL у .in() на длинных периодах.

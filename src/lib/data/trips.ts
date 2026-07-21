@@ -21,6 +21,7 @@ export interface LineupInfo {
   id: string;
   work_date: string;
   shift_type: "day" | "night";
+  status: "open" | "closed";
 }
 
 export interface PreviousLineup extends LineupInfo {
@@ -43,6 +44,10 @@ export interface TripsScreenData {
   previous: PreviousLineup | null;
   /** Рейсы текущей смены по машинам: счётчик и время последнего (для плиток). */
   shiftStats: Record<string, { count: number; lastAt: string }>;
+  /** Все рейсы карточки смены (для экрана проверки: удаление конкретных). */
+  shiftTrips: { id: string; vehicle_id: string; driver_id: string; at: string }[];
+  /** Текущий пользователь может переоткрывать закрытые карточки (офис/админ). */
+  canReopen: boolean;
 }
 
 /** Границы смены в поясе Asia/Aqtobe (UTC+5): день 07–19, ночь 19–07. */
@@ -79,7 +84,7 @@ export async function loadTripsData(
       .limit(15),
     supabase
       .from("trip_lineups")
-      .select("id, work_date, shift_type")
+      .select("id, work_date, shift_type, status")
       .eq("work_date", date)
       .eq("shift_type", shift)
       .maybeSingle(),
@@ -104,7 +109,7 @@ export async function loadTripsData(
     !lineup
       ? supabase
           .from("trip_lineups")
-          .select("id, work_date, shift_type")
+          .select("id, work_date, shift_type, status")
           .or(`work_date.lt.${date},and(work_date.eq.${date},shift_type.eq.day)`)
           .order("work_date", { ascending: false })
           .order("created_at", { ascending: false })
@@ -113,7 +118,7 @@ export async function loadTripsData(
       : Promise.resolve({ data: null }),
     supabase
       .from("trip_records")
-      .select("vehicle_id, created_at")
+      .select("id, vehicle_id, driver_id, created_at")
       .gte("created_at", w.fromISO)
       .lt("created_at", w.toISO)
       .order("created_at"),
@@ -163,5 +168,12 @@ export async function loadTripsData(
     lineupVehicleIds: (lineupVehRes.data ?? []).map((r: { vehicle_id: string }) => r.vehicle_id),
     previous,
     shiftStats,
+    shiftTrips: (shiftTripsRes.data ?? []).map((t) => ({
+      id: t.id,
+      vehicle_id: t.vehicle_id,
+      driver_id: t.driver_id,
+      at: t.created_at,
+    })),
+    canReopen: ["office", "admin"].some((r) => current?.profile?.roles.includes(r)),
   };
 }
