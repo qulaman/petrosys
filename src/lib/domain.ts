@@ -68,6 +68,9 @@ export interface Vehicle {
   contractor_id: string | null;
   contract_id: string | null;
   qr_code: string | null;
+  /** Штатные водители из справочника АВР — подстановка по умолчанию в формах. */
+  day_driver_id?: string | null;
+  night_driver_id?: string | null;
 }
 
 export interface Driver {

@@ -49,9 +49,13 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
   }
 
   function driverFor(vehicleId: string): string | null {
+    // приоритет: штатный водитель смены из справочника АВР → последний по машине → пул
+    const v = vehById.get(vehicleId);
+    const staff = data.shift === "night" ? v?.night_driver_id : v?.day_driver_id;
+    if (staff && drvById.has(staff)) return staff;
     const last = lastDriverByVehicle[vehicleId];
     if (last && drvById.has(last)) return last;
-    const pool = driverPoolFor(vehById.get(vehicleId), drivers);
+    const pool = driverPoolFor(v, drivers);
     return pool[0]?.id ?? drivers[0]?.id ?? null;
   }
 

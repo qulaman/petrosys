@@ -122,6 +122,7 @@ export type Database = {
         Row: {
           contract_id: string
           created_at: string
+          doc_type: string | null
           id: string
           note: string | null
           org_id: string
@@ -131,6 +132,7 @@ export type Database = {
         Insert: {
           contract_id: string
           created_at?: string
+          doc_type?: string | null
           id?: string
           note?: string | null
           org_id?: string
@@ -140,6 +142,7 @@ export type Database = {
         Update: {
           contract_id?: string
           created_at?: string
+          doc_type?: string | null
           id?: string
           note?: string | null
           org_id?: string
@@ -795,6 +798,7 @@ export type Database = {
         Row: {
           contract_id: string
           created_at: string
+          doc_type: string | null
           id: string
           note: string | null
           org_id: string
@@ -807,6 +811,7 @@ export type Database = {
         Insert: {
           contract_id: string
           created_at?: string
+          doc_type?: string | null
           id?: string
           note?: string | null
           org_id?: string
@@ -819,6 +824,7 @@ export type Database = {
         Update: {
           contract_id?: string
           created_at?: string
+          doc_type?: string | null
           id?: string
           note?: string | null
           org_id?: string
@@ -1451,9 +1457,11 @@ export type Database = {
           contract_id: string | null
           contractor_id: string | null
           created_at: string
+          day_driver_id: string | null
           fuel_norm_per_hour: number | null
           id: string
           is_active: boolean
+          night_driver_id: string | null
           org_id: string
           qr_code: string | null
           reg_number: string
@@ -1467,9 +1475,11 @@ export type Database = {
           contract_id?: string | null
           contractor_id?: string | null
           created_at?: string
+          day_driver_id?: string | null
           fuel_norm_per_hour?: number | null
           id?: string
           is_active?: boolean
+          night_driver_id?: string | null
           org_id?: string
           qr_code?: string | null
           reg_number: string
@@ -1483,15 +1493,31 @@ export type Database = {
           contract_id?: string | null
           contractor_id?: string | null
           created_at?: string
+          day_driver_id?: string | null
           fuel_norm_per_hour?: number | null
           id?: string
           is_active?: boolean
+          night_driver_id?: string | null
           org_id?: string
           qr_code?: string | null
           reg_number?: string
           vehicle_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vehicles_day_driver_id_fkey"
+            columns: ["day_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_night_driver_id_fkey"
+            columns: ["night_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vehicles_contract_id_fkey"
             columns: ["contract_id"]

@@ -59,7 +59,7 @@ export async function loadShiftJournalData(
   const [vehiclesRes, driversRes, workTypesRes, journalRes] = await Promise.all([
     supabase
       .from("vehicles")
-      .select("id, brand, reg_number, vehicle_type, accounting_type, contractor_id, contract_id, qr_code")
+      .select("id, brand, reg_number, vehicle_type, accounting_type, contractor_id, contract_id, qr_code, day_driver_id, night_driver_id")
       .eq("is_active", true)
       .eq("accounting_type", "hours")
       .order("reg_number"),
