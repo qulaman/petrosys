@@ -290,6 +290,39 @@ export async function closeTripJournal(
   return { ok: true };
 }
 
+/**
+ * Удаление карточки смены целиком (ошибочно созданная): сначала рейсы
+ * (RLS ограничит учётчика своими), затем карточка — перечень машин уходит
+ * каскадом. Чужие рейсы блокируют удаление (FK без каскада).
+ */
+export async function deleteTripJournal(lineupId: string): Promise<Result> {
+  const p = zUuid.safeParse(lineupId);
+  if (!p.success) return { ok: false, error: "Неверный id" };
+
+  const supabase = await createClient();
+  const { error: te } = await supabase.from("trip_records").delete().eq("lineup_id", p.data);
+  if (te) {
+    devError("deleteTripJournal/trips", te);
+    return { ok: false, error: te.message };
+  }
+  const { count: left } = await supabase
+    .from("trip_records")
+    .select("id", { count: "exact", head: true })
+    .eq("lineup_id", p.data);
+  if (left)
+    return { ok: false, error: `В карточке остались рейсы других учётчиков (${left}) — удалить может офис` };
+
+  const { data, error } = await supabase.from("trip_lineups").delete().eq("id", p.data).select("id");
+  if (error) {
+    devError("deleteTripJournal", error);
+    return { ok: false, error: error.message };
+  }
+  if (!data?.length)
+    return { ok: false, error: "Карточка закрыта — удалить может только офис после переоткрытия" };
+  revalidatePath("/fleet/trips");
+  return { ok: true };
+}
+
 /** Переоткрытие закрытой карточки — офис/админ (RLS не пустит учётчика). */
 export async function reopenTripJournal(lineupId: string): Promise<Result> {
   const p = zUuid.safeParse(lineupId);

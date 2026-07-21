@@ -18,7 +18,7 @@ import { fmtTime } from "@/lib/format";
 import { driverPoolFor } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { TripsScreenData } from "@/lib/data/trips";
-import { addLineupVehicle, closeTripJournal, createLineup, createTrip, deleteShiftTrips, deleteTrip, deleteTrips, removeLineupVehicle, reopenTripJournal } from "./actions";
+import { addLineupVehicle, closeTripJournal, createLineup, createTrip, deleteShiftTrips, deleteTrip, deleteTripJournal, deleteTrips, removeLineupVehicle, reopenTripJournal } from "./actions";
 
 const ROUTE_KEY = "qo-trip-route";
 
@@ -49,7 +49,7 @@ function getGeoFast(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export function TripsClient({ data }: { data: TripsScreenData }) {
-  const { routes, vehicles, drivers, lastDriverByVehicle, recentTrips, lineup, lineupVehicleIds, previous, shiftStats, shiftTrips, canReopen } = data;
+  const { routes, vehicles, drivers, lastDriverByVehicle, lineup, lineupVehicleIds, previous, shiftStats, shiftTrips, canReopen } = data;
   const router = useRouter();
   const pathname = usePathname();
 
@@ -71,6 +71,9 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   // Пакетное удаление в ленте: режим выбора + отмеченные записи.
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showAllTrips, setShowAllTrips] = useState(false);
+  // Лента = рейсы ТЕКУЩЕЙ смены, свежие сверху (старые дни — в журнале рейсов).
+  const shiftFeed = useMemo(() => [...data.shiftTrips].reverse(), [data.shiftTrips]);
   const tripsByVehicle = useMemo(() => {
     const m = new Map<string, { count: number; lastId: string }>();
     for (const t of data.shiftTrips) {
@@ -495,16 +498,38 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
                 }
               />
             </div>
+
+            <div className="border-t pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive"
+                disabled={pending}
+                onClick={() =>
+                  toast("Удалить карточку смены целиком?", {
+                    description: `Будут удалены все рейсы (${shiftTrips.length}) и перечень машин. Смену можно будет создать заново.`,
+                    action: {
+                      label: "Удалить карточку",
+                      onClick: () => act(() => deleteTripJournal(lineup.id), "Карточка смены удалена"),
+                    },
+                    cancel: { label: "Отмена", onClick: () => {} },
+                    duration: 8000,
+                  })
+                }
+              >
+                <Trash2 className="size-4" /> Удалить карточку смены
+              </Button>
+            </div>
           </div>
         ) : null}
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-      {/* Лента: неотправленные + недавние подтверждённые */}
+      {/* Лента: неотправленные + рейсы текущей смены */}
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium">Последние рейсы</p>
+          <p className="text-sm font-medium">Рейсы смены ({shiftTrips.length})</p>
           <Button
             variant={selectMode ? "default" : "ghost"}
             size="sm"
@@ -569,7 +594,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
               ) : null}
             </div>
           ))}
-          {recentTrips.map((t) => {
+          {(showAllTrips ? shiftFeed : shiftFeed.slice(0, 25)).map((t) => {
             const isSelected = selected.has(t.id);
             return (
               <div
@@ -616,8 +641,13 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
               </div>
             );
           })}
-          {entries.length === 0 && recentTrips.length === 0 ? (
-            <EmptyState icon={Truck} title="Рейсов пока нет" description="Отсканируйте QR машины или выберите её выше — рейс запишется в два касания." className="border-0 p-6" />
+          {shiftFeed.length > 25 && !showAllTrips ? (
+            <button className="p-2.5 text-sm text-primary underline" onClick={() => setShowAllTrips(true)}>
+              Показать все ({shiftFeed.length})
+            </button>
+          ) : null}
+          {entries.length === 0 && shiftFeed.length === 0 ? (
+            <EmptyState icon={Truck} title="Рейсов за смену пока нет" description="Отсканируйте QR машины или выберите её выше — рейс запишется в два касания. Прошлые смены — в журнале рейсов." className="border-0 p-6" />
           ) : null}
         </div>
       </section>

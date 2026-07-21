@@ -10,12 +10,6 @@ export interface RouteOption {
   require_signature: boolean;
 }
 
-export interface RecentTrip {
-  id: string;
-  at: string;
-  vehicle_id: string;
-  driver_id: string;
-}
 
 export interface LineupInfo {
   id: string;
@@ -36,7 +30,6 @@ export interface TripsScreenData {
   vehicles: Vehicle[]; // техника с учётом рейсов (accounting_type trips/both)
   drivers: Driver[];
   lastDriverByVehicle: Record<string, string>;
-  recentTrips: RecentTrip[];
   /** Перечень «на линии» текущей смены (этап 1) и его машины. */
   lineup: LineupInfo | null;
   lineupVehicleIds: string[];
@@ -68,7 +61,7 @@ export async function loadTripsData(
   const orgId = current?.profile?.org_id ?? "";
 
   const supabase = await createClient();
-  const [routesRes, vehiclesRes, driversRes, recentRes, lineupRes] = await Promise.all([
+  const [routesRes, vehiclesRes, driversRes, lineupRes] = await Promise.all([
     supabase.from("routes").select("id, name, require_signature").eq("is_active", true).order("name"),
     supabase
       .from("vehicles")
@@ -77,11 +70,6 @@ export async function loadTripsData(
       .in("accounting_type", ["trips", "both"])
       .order("reg_number"),
     supabase.from("drivers").select("id, full_name, contractor_id, contract_id").eq("is_active", true).order("full_name"),
-    supabase
-      .from("trip_records")
-      .select("id, created_at, vehicle_id, driver_id")
-      .order("created_at", { ascending: false })
-      .limit(15),
     supabase
       .from("trip_lineups")
       .select("id, work_date, shift_type, status")
@@ -158,12 +146,6 @@ export async function loadTripsData(
     vehicles: (vehiclesRes.data ?? []) as Vehicle[],
     drivers: (driversRes.data ?? []) as Driver[],
     lastDriverByVehicle,
-    recentTrips: (recentRes.data ?? []).map((t) => ({
-      id: t.id,
-      at: t.created_at,
-      vehicle_id: t.vehicle_id,
-      driver_id: t.driver_id,
-    })),
     lineup,
     lineupVehicleIds: (lineupVehRes.data ?? []).map((r: { vehicle_id: string }) => r.vehicle_id),
     previous,
