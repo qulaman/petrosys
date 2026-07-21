@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, Check, CopyPlus, FilePlus2, RotateCw, ScanLine, Truck, X } from "lucide-react";
@@ -33,7 +33,7 @@ interface TripPayload {
 }
 
 function getGeoFast(): Promise<{ lat: number; lng: number } | null> {
-  return new Promise((resolve) => {
+  const geo = new Promise<{ lat: number; lng: number } | null>((resolve) => {
     if (typeof navigator === "undefined" || !navigator.geolocation)
       return resolve(null);
     navigator.geolocation.getCurrentPosition(
@@ -42,6 +42,10 @@ function getGeoFast(): Promise<{ lat: number; lng: number } | null> {
       { timeout: 2500, maximumAge: 300000, enableHighAccuracy: false },
     );
   });
+  // Обходной таймаут: пока висит браузерный запрос разрешения, timeout из опций
+  // не действует и колбэки не вызываются вовсе — рейс не должен ждать вечно.
+  const cap = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
+  return Promise.race([geo, cap]);
 }
 
 export function TripsClient({ data }: { data: TripsScreenData }) {
@@ -57,6 +61,16 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const [pendingSig, setPendingSig] = useState<{ vehicle_id: string; driver_id: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // Защита от дабл-тапа: плитки блокируются на время постановки рейса в очередь,
+  // повторный рейс той же машины в коротком окне — только с подтверждением.
+  const [enqueueBusy, setEnqueueBusy] = useState(false);
+  const lastEnqueueRef = useRef<Map<string, number>>(new Map());
+
+  // Прогрев разрешения геолокации при открытии экрана: промпт появляется в
+  // спокойный момент, а не посреди фиксации первого рейса.
+  useEffect(() => {
+    void getGeoFast();
+  }, []);
 
   const submit = useCallback((p: TripPayload) => createTrip(p), []);
   const onSuccess = useCallback(() => router.refresh(), [router]);
@@ -103,24 +117,35 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   async function enqueueTrip(vehicleId: string, driverId: string, signaturePath: string | null) {
     if (!routeId || !lineup) return;
     const v = vehById.get(vehicleId);
-    const geo = await getGeoFast();
-    add(
-      {
-        lineup_id: lineup.id,
-        route_id: routeId,
-        vehicle_id: vehicleId,
-        driver_id: driverId,
-        driver_signature_url: signaturePath,
-        geo_lat: geo?.lat ?? null,
-        geo_lng: geo?.lng ?? null,
-      },
-      `${v?.reg_number ?? ""} · ${fmtTime(new Date().toISOString())}`,
-    );
+    setEnqueueBusy(true);
+    try {
+      const geo = await getGeoFast();
+      add(
+        {
+          lineup_id: lineup.id,
+          route_id: routeId,
+          vehicle_id: vehicleId,
+          driver_id: driverId,
+          driver_signature_url: signaturePath,
+          geo_lat: geo?.lat ?? null,
+          geo_lng: geo?.lng ?? null,
+        },
+        `${v?.reg_number ?? ""} · ${fmtTime(new Date().toISOString())}`,
+      );
+      lastEnqueueRef.current.set(vehicleId, Date.now());
+    } finally {
+      setEnqueueBusy(false);
+    }
   }
 
   function recordTrip(vehicleId: string) {
     setError(null);
-    if (!routeId || !lineup) return;
+    if (!routeId || !lineup || enqueueBusy) return;
+    const last = lastEnqueueRef.current.get(vehicleId);
+    if (last && Date.now() - last < 90_000) {
+      const reg = vehById.get(vehicleId)?.reg_number ?? "Машина";
+      if (!window.confirm(`${reg} уже записана только что. Записать ещё один рейс?`)) return;
+    }
     const driverId = driverForVehicle(vehicleId);
     if (!driverId) {
       setError("Для машины нет активного водителя");
@@ -280,6 +305,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         large
         sub="brand"
         stickyFilters
+        disabled={enqueueBusy}
         onSelect={(v) => recordTrip(v.id)}
         emptyText="Самосвалы не найдены"
         noVehiclesText="На линии пока нет машин — выведите их ниже."
