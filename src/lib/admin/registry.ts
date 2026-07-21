@@ -19,6 +19,8 @@ export interface ColumnDef {
   key: string;
   label: string;
   type?: FieldType;
+  /** Подписи значений для колонок без поля в форме (например, source). */
+  labels?: Record<string, string>;
 }
 
 export interface EntityConfig {
@@ -77,6 +79,12 @@ export const ENTITIES: Record<string, EntityConfig> = {
       { key: "brand", label: "Марка" },
       { key: "vehicle_type", label: "Вид" },
       { key: "accounting_type", label: "Учёт" },
+      { key: "contract_id", label: "Договор", type: "boolean" },
+      {
+        key: "source",
+        label: "Источник",
+        labels: { import: "импорт", manual: "вручную", field: "с поля" },
+      },
       { key: "is_active", label: "Активна", type: "boolean" },
     ],
     fields: [
@@ -91,6 +99,7 @@ export const ENTITIES: Record<string, EntityConfig> = {
         options: [
           { value: "hours", label: "По моточасам" },
           { value: "trips", label: "По рейсам" },
+          { value: "both", label: "Часы + рейсы" },
         ],
       },
       { key: "contractor_id", label: "Подрядчик", type: "select", optionsFrom: "contractors" },

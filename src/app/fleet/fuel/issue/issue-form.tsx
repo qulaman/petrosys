@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { uploadReceipt, uploadSignature } from "@/lib/storage/upload";
 import { devError, devLog } from "@/lib/dev-log";
 import { fmtLiters, fmtInt } from "@/lib/format";
-import { driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
+import { driverGroups, driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
 import type { FuelIssueData } from "@/lib/data/fuel-issue";
 import { createFuelIssue } from "./actions";
 
@@ -64,14 +64,8 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
 
   const vehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
 
-  const driverOptions = useMemo(() => {
-    const pool = driverPoolFor(vehicle, drivers);
-    // выбранный водитель (по последним записям) всегда присутствует в списке
-    if (driverId && !pool.some((d) => d.id === driverId)) {
-      return [...pool, ...drivers.filter((d) => d.id === driverId)];
-    }
-    return pool;
-  }, [drivers, vehicle, driverId]);
+  // Сквозной подход: «свои» водители машины (штатные/договор/ИП) сверху, остальные ниже.
+  const driverOptions = useMemo(() => driverGroups(vehicle, drivers), [drivers, vehicle]);
 
   const litersNum = parseFloat(liters || "0");
   const overBalance =
@@ -285,11 +279,24 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
             onChange={(e) => setDriverId(e.target.value)}
             className="h-12 rounded-md border bg-background px-3 text-base"
           >
-            {driverOptions.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.full_name}
-              </option>
-            ))}
+            {driverOptions.primary.length ? (
+              <>
+                <optgroup label="Водители машины">
+                  {driverOptions.primary.map((d) => (
+                    <option key={d.id} value={d.id}>{d.full_name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Остальные">
+                  {driverOptions.rest.map((d) => (
+                    <option key={d.id} value={d.id}>{d.full_name}</option>
+                  ))}
+                </optgroup>
+              </>
+            ) : (
+              driverOptions.rest.map((d) => (
+                <option key={d.id} value={d.id}>{d.full_name}</option>
+              ))
+            )}
           </select>
         </section>
       ) : null}
@@ -380,9 +387,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
 
       {showSig ? (
         <SignaturePad
-          signerName={
-            driverOptions.find((d) => d.id === driverId)?.full_name ?? "Водитель"
-          }
+          signerName={drivers.find((d) => d.id === driverId)?.full_name ?? "Водитель"}
           onDone={(dataUrl) => {
             setSigDataUrl(dataUrl);
             setShowSig(false);

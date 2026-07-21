@@ -1465,6 +1465,7 @@ export type Database = {
           org_id: string
           qr_code: string | null
           reg_number: string
+          source: string
           vehicle_type: string
         }
         Insert: {
@@ -1483,6 +1484,7 @@ export type Database = {
           org_id?: string
           qr_code?: string | null
           reg_number: string
+          source?: string
           vehicle_type: string
         }
         Update: {
@@ -1501,6 +1503,7 @@ export type Database = {
           org_id?: string
           qr_code?: string | null
           reg_number?: string
+          source?: string
           vehicle_type?: string
         }
         Relationships: [

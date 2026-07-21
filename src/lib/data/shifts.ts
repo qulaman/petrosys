@@ -61,7 +61,7 @@ export async function loadShiftJournalData(
       .from("vehicles")
       .select("id, brand, reg_number, vehicle_type, accounting_type, contractor_id, contract_id, qr_code, day_driver_id, night_driver_id")
       .eq("is_active", true)
-      .eq("accounting_type", "hours")
+      .in("accounting_type", ["hours", "both"])
       .order("reg_number"),
     supabase.from("drivers").select("id, full_name, contractor_id, contract_id").eq("is_active", true).order("full_name"),
     supabase.from("work_types").select("id, name").eq("is_active", true).order("name"),

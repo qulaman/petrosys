@@ -36,7 +36,7 @@ export const VEHICLE_TYPE_LABELS_PLURAL: Record<VehicleType, string> = {
   other: "Прочее",
 };
 
-export type AccountingType = "hours" | "trips";
+export type AccountingType = "hours" | "trips" | "both";
 export type FuelSourceType = "card" | "tanker";
 
 export interface FuelCard {
@@ -80,26 +80,46 @@ export interface Driver {
   contract_id: string | null;
 }
 
+interface DriverPoolVehicle {
+  contractor_id: string | null;
+  contract_id: string | null;
+  day_driver_id?: string | null;
+  night_driver_id?: string | null;
+}
+
 /**
- * Пул водителей для машины: сначала водители того же ДОГОВОРА (Приложение №2),
- * затем того же подрядчика, иначе все. Пустые ступени пропускаются.
+ * Пул водителей для машины: штатные (день/ночь из справочника АВР) → водители
+ * того же договора → того же подрядчика → иначе все. Пустые ступени пропускаются.
  */
 export function driverPoolFor<
-  D extends { contractor_id: string | null; contract_id: string | null },
->(
-  vehicle: { contractor_id: string | null; contract_id: string | null } | null | undefined,
-  drivers: D[],
-): D[] {
+  D extends { id: string; contractor_id: string | null; contract_id: string | null },
+>(vehicle: DriverPoolVehicle | null | undefined, drivers: D[]): D[] {
   if (!vehicle) return drivers;
-  if (vehicle.contract_id) {
-    const byContract = drivers.filter((d) => d.contract_id === vehicle.contract_id);
-    if (byContract.length) return byContract;
-  }
-  if (vehicle.contractor_id) {
-    const byContractor = drivers.filter((d) => d.contractor_id === vehicle.contractor_id);
-    if (byContractor.length) return byContractor;
-  }
-  return drivers;
+  const staff = drivers.filter(
+    (d) => d.id === vehicle.day_driver_id || d.id === vehicle.night_driver_id,
+  );
+  const byContract = vehicle.contract_id
+    ? drivers.filter((d) => d.contract_id === vehicle.contract_id)
+    : [];
+  const byContractor = vehicle.contractor_id
+    ? drivers.filter((d) => d.contractor_id === vehicle.contractor_id)
+    : [];
+  const pool = [...new Set([...staff, ...byContract, ...byContractor])];
+  return pool.length ? pool : drivers;
+}
+
+/**
+ * Группы для селектов водителя (сквозной подход): «свои» водители машины
+ * (штатные/договор/ИП) и остальные. Если привязок нет — primary пустой,
+ * UI показывает общий список.
+ */
+export function driverGroups<
+  D extends { id: string; contractor_id: string | null; contract_id: string | null },
+>(vehicle: DriverPoolVehicle | null | undefined, drivers: D[]): { primary: D[]; rest: D[] } {
+  const pool = driverPoolFor(vehicle, drivers);
+  if (pool.length === drivers.length) return { primary: [], rest: drivers };
+  const inPool = new Set(pool.map((d) => d.id));
+  return { primary: pool, rest: drivers.filter((d) => !inPool.has(d.id)) };
 }
 
 export function vehicleTypeLabel(t: string): string {

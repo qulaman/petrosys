@@ -49,7 +49,7 @@ function getGeoFast(): Promise<{ lat: number; lng: number } | null> {
 }
 
 export function TripsClient({ data }: { data: TripsScreenData }) {
-  const { routes, vehicles, drivers, lastDriverByVehicle, recentTrips, lineup, lineupVehicleIds, previous } = data;
+  const { routes, vehicles, drivers, lastDriverByVehicle, recentTrips, lineup, lineupVehicleIds, previous, shiftStats } = data;
   const router = useRouter();
   const pathname = usePathname();
 
@@ -85,7 +85,17 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const drvById = useMemo(() => new Map(drivers.map((d) => [d.id, d])), [drivers]);
 
   const onLineSet = useMemo(() => new Set(lineupVehicleIds), [lineupVehicleIds]);
-  const onLineVehicles = vehicles.filter((v) => onLineSet.has(v.id));
+  // Сортировка «давно без рейса — сверху» для массового ввода (по умолчанию алфавит).
+  const [sortIdleFirst, setSortIdleFirst] = useState(false);
+  const onLineVehicles = useMemo(() => {
+    const list = vehicles.filter((v) => onLineSet.has(v.id));
+    if (!sortIdleFirst) return list;
+    return [...list].sort((a, b) => {
+      const la = shiftStats[a.id]?.lastAt ?? "";
+      const lb = shiftStats[b.id]?.lastAt ?? "";
+      return la === lb ? a.reg_number.localeCompare(b.reg_number, "ru") : la < lb ? -1 : 1;
+    });
+  }, [vehicles, onLineSet, sortIdleFirst, shiftStats]);
   const offLineVehicles = vehicles.filter((v) => !onLineSet.has(v.id));
 
   const nav = useNavProgress();
@@ -300,6 +310,16 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         <ScanLine className="size-7" /> Сканировать QR
       </Button>
 
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Тап по машине = +1 рейс</p>
+        <Button
+          variant={sortIdleFirst ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSortIdleFirst((v) => !v)}
+        >
+          Давно без рейса — сверху
+        </Button>
+      </div>
       <VehiclePicker
         vehicles={onLineVehicles}
         large
@@ -309,6 +329,19 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         onSelect={(v) => recordTrip(v.id)}
         emptyText="Самосвалы не найдены"
         noVehiclesText="На линии пока нет машин — выведите их ниже."
+        tileInfo={(v) => {
+          const s = shiftStats[v.id];
+          return (
+            <span className="ml-2 flex shrink-0 flex-col items-end">
+              <span className={`rounded-full px-2 py-0.5 text-sm font-bold tabular-nums ${s ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                {s?.count ?? 0}
+              </span>
+              <span className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                {s ? fmtTime(s.lastAt) : "—"}
+              </span>
+            </span>
+          );
+        }}
       />
 
       {/* Управление линией: вывести/снять машину в течение смены */}

@@ -37,7 +37,7 @@ export async function loadFuelIssueData(): Promise<FuelIssueData> {
     supabase.from("tankers").select("id, name, capacity_liters").eq("is_active", true).order("name"),
     supabase
       .from("vehicles")
-      .select("id, brand, reg_number, vehicle_type, accounting_type, contractor_id, contract_id, qr_code")
+      .select("id, brand, reg_number, vehicle_type, accounting_type, contractor_id, contract_id, qr_code, day_driver_id, night_driver_id")
       .eq("is_active", true)
       .order("reg_number"),
     supabase.from("drivers").select("id, full_name, contractor_id, contract_id").eq("is_active", true).order("full_name"),

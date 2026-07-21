@@ -24,6 +24,8 @@ interface VehiclePickerProps {
   searchTrailing?: ReactNode;
   /** Элемент в правой части каждой плитки (например, ✕ для снятия). */
   tileTrailing?: ReactNode;
+  /** Инфо-блок в правой части плитки, зависящий от машины (счётчик рейсов и т.п.). */
+  tileInfo?: (vehicle: Vehicle) => ReactNode;
   /** Закрепить фильтры (вкладки + поиск) под шапкой при листании длинного списка. */
   stickyFilters?: boolean;
   /** Блок над вкладками внутри закреплённой области (например, источник топлива). */
@@ -44,6 +46,7 @@ export function VehiclePicker({
   noVehiclesText,
   searchTrailing,
   tileTrailing,
+  tileInfo,
   stickyFilters = false,
   header,
 }: VehiclePickerProps) {
@@ -119,6 +122,7 @@ export function VehiclePicker({
                 {sub === "brand" ? v.brand : vehicleTypeLabel(v.vehicle_type)}
               </span>
             </span>
+            {tileInfo?.(v)}
             {tileTrailing}
           </button>
         ))}

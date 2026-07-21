@@ -32,7 +32,7 @@ export interface TripsScreenData {
   date: string;
   shift: "day" | "night";
   routes: RouteOption[];
-  vehicles: Vehicle[]; // только самосвалы (accounting_type='trips')
+  vehicles: Vehicle[]; // техника с учётом рейсов (accounting_type trips/both)
   drivers: Driver[];
   lastDriverByVehicle: Record<string, string>;
   recentTrips: RecentTrip[];
@@ -41,6 +41,18 @@ export interface TripsScreenData {
   lineupVehicleIds: string[];
   /** Кандидат на наследование, когда перечня на смену ещё нет. */
   previous: PreviousLineup | null;
+  /** Рейсы текущей смены по машинам: счётчик и время последнего (для плиток). */
+  shiftStats: Record<string, { count: number; lastAt: string }>;
+}
+
+/** Границы смены в поясе Asia/Aqtobe (UTC+5): день 07–19, ночь 19–07. */
+function shiftWindow(workDate: string, shift: "day" | "night") {
+  const nextDay = new Date(`${workDate}T00:00:00Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const next = nextDay.toISOString().slice(0, 10);
+  const from = shift === "day" ? `${workDate}T07:00:00+05:00` : `${workDate}T19:00:00+05:00`;
+  const to = shift === "day" ? `${workDate}T19:00:00+05:00` : `${next}T07:00:00+05:00`;
+  return { fromISO: new Date(from).toISOString(), toISO: new Date(to).toISOString() };
 }
 
 export async function loadTripsData(
@@ -55,9 +67,9 @@ export async function loadTripsData(
     supabase.from("routes").select("id, name, require_signature").eq("is_active", true).order("name"),
     supabase
       .from("vehicles")
-      .select("id, brand, reg_number, vehicle_type, accounting_type, contractor_id, contract_id, qr_code")
+      .select("id, brand, reg_number, vehicle_type, accounting_type, contractor_id, contract_id, qr_code, day_driver_id, night_driver_id")
       .eq("is_active", true)
-      .eq("accounting_type", "trips")
+      .in("accounting_type", ["trips", "both"])
       .order("reg_number"),
     supabase.from("drivers").select("id, full_name, contractor_id, contract_id").eq("is_active", true).order("full_name"),
     supabase
@@ -75,9 +87,11 @@ export async function loadTripsData(
 
   const lineup = (lineupRes.data as LineupInfo | null) ?? null;
 
-  // Вторая волна: машины перечня, история водителей, кандидат на наследование.
+  // Вторая волна: машины перечня, история водителей, кандидат на наследование,
+  // рейсы текущей смены (счётчики на плитках).
+  const w = shiftWindow(date, shift);
   const admin = createAdminClient();
-  const [lineupVehRes, lastDriverRes, prevRes] = await Promise.all([
+  const [lineupVehRes, lastDriverRes, prevRes, shiftTripsRes] = await Promise.all([
     lineup
       ? supabase.from("trip_lineup_vehicles").select("vehicle_id").eq("lineup_id", lineup.id)
       : Promise.resolve({ data: null }),
@@ -97,6 +111,12 @@ export async function loadTripsData(
           .limit(1)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    supabase
+      .from("trip_records")
+      .select("vehicle_id, created_at")
+      .gte("created_at", w.fromISO)
+      .lt("created_at", w.toISO)
+      .order("created_at"),
   ]);
 
   // Источник наследования (самонаследование той же смены исключаем).
@@ -117,6 +137,14 @@ export async function loadTripsData(
     }
   }
 
+  const shiftStats: Record<string, { count: number; lastAt: string }> = {};
+  for (const t of shiftTripsRes.data ?? []) {
+    const s = shiftStats[t.vehicle_id] ?? { count: 0, lastAt: t.created_at };
+    s.count += 1;
+    s.lastAt = t.created_at;
+    shiftStats[t.vehicle_id] = s;
+  }
+
   return {
     orgId,
     date,
@@ -134,5 +162,6 @@ export async function loadTripsData(
     lineup,
     lineupVehicleIds: (lineupVehRes.data ?? []).map((r: { vehicle_id: string }) => r.vehicle_id),
     previous,
+    shiftStats,
   };
 }

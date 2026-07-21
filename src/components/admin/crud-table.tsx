@@ -68,6 +68,8 @@ export function CrudTable({
     const v = row[key];
     if (type === "boolean") return v ? "Да" : "—";
     if (v == null || v === "") return "—";
+    const col = cfg.columns.find((c) => c.key === key);
+    if (col?.labels?.[String(v)]) return col.labels[String(v)];
     const field = cfg.fields.find((f) => f.key === key);
     if (field) {
       const opt = optionsFor(field).find((o) => o.value === String(v));

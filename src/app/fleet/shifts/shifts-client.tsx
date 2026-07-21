@@ -11,7 +11,7 @@ import { SignaturePad } from "@/components/field/signature-pad";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
 import { useNavProgress } from "@/components/nav-progress";
 import { uploadSignature } from "@/lib/storage/upload";
-import { driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
+import { driverGroups, driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { JournalLine, ShiftJournalData } from "@/lib/data/shifts";
 import { addLine, closeJournal, createJournal, removeLine, reopenJournal, updateJournal, updateLine } from "./actions";
@@ -173,11 +173,15 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
           const v = vehById.get(l.vehicle_id);
           const signed = !!l.driver_signature_url;
           return (
-            <div key={l.id} className={`rounded-lg border p-3 ${signed ? "border-green-600/40" : ""}`}>
+            <div key={l.id} className={`rounded-lg border p-3 ${signed ? "border-green-600 bg-green-600/10" : ""}`}>
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold tracking-tight">{v?.reg_number ?? "—"}</span>
                 <span className="text-xs text-muted-foreground">{v ? vehicleTypeLabel(v.vehicle_type) : ""}</span>
-                {signed ? <Check className="ml-auto size-5 text-green-600" /> : null}
+                {signed ? (
+                  <span className="ml-auto flex items-center gap-1 rounded-full bg-green-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    <Check className="size-3.5" /> подписано
+                  </span>
+                ) : null}
                 {!isClosed && !signed ? (
                   <button className="ml-auto" onClick={() => act(() => removeLine(l.id), "Строка убрана")} aria-label="Убрать">
                     <Trash2 className="size-4 text-destructive" />
@@ -198,7 +202,7 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
                     if (!(h > 0 && h <= 24)) { toast.error("Часы: 0–24"); setHoursDraft((s) => ({ ...s, [l.id]: String(l.hours) })); return; }
                     act(() => updateLine({ line_id: l.id, hours: h }), signed ? "Часы изменены — нужна новая подпись" : "Часы изменены");
                   }}
-                  className="h-11 text-center text-lg font-semibold"
+                  className={`h-11 text-center text-lg font-semibold ${signed ? "border-green-600/60 text-green-700 dark:text-green-400" : ""}`}
                 />
                 <select
                   value={l.driver_id}
@@ -207,14 +211,20 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
                   className="h-11 rounded-md border bg-background px-2 text-sm disabled:opacity-60"
                 >
                   {(() => {
-                    // Пул по договору/подрядчику машины; текущий водитель — всегда в списке.
-                    const pool = driverPoolFor(vehById.get(l.vehicle_id), drivers);
-                    const opts = pool.some((d) => d.id === l.driver_id)
-                      ? pool
-                      : [...pool, ...drivers.filter((d) => d.id === l.driver_id)];
-                    return opts.map((d) => (
-                      <option key={d.id} value={d.id}>{d.full_name}</option>
-                    ));
+                    // Сквозной подход: сначала «свои» водители машины (штатные/ИП), затем остальные.
+                    const { primary, rest } = driverGroups(vehById.get(l.vehicle_id), drivers);
+                    if (!primary.length)
+                      return rest.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>);
+                    return (
+                      <>
+                        <optgroup label="Водители машины">
+                          {primary.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                        </optgroup>
+                        <optgroup label="Остальные">
+                          {rest.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                        </optgroup>
+                      </>
+                    );
                   })()}
                 </select>
               </div>
