@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 
 /**
  * Полноэкранная подпись пальцем. Сверху крупно ФИО подписанта, снизу — крупные
- * кнопки Очистить/Готово. onDone возвращает PNG dataURL.
+ * кнопки Очистить/Готово. onDone возвращает SVG-разметку подписи (вектор штрихов:
+ * ~2 КБ против ~100 КБ у PNG с retina-канваса — критично для объёма хранилища).
  */
 export function SignaturePad({
   signerName,
@@ -14,7 +15,7 @@ export function SignaturePad({
   onCancel,
 }: {
   signerName: string;
-  onDone: (dataUrl: string) => void;
+  onDone: (svg: string) => void;
   onCancel: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -61,7 +62,7 @@ export function SignaturePad({
   function done() {
     const pad = padRef.current;
     if (!pad || pad.isEmpty()) return;
-    onDone(pad.toDataURL("image/png"));
+    onDone(pad.toSVG({ includeBackgroundColor: true }));
   }
 
   return (
