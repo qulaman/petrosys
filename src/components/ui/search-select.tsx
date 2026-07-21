@@ -63,7 +63,6 @@ export function SearchSelect({
     setOpen(false);
   }
 
-  let lastGroup: string | undefined;
 
   return (
     <div ref={ref} className={cn("relative", className)}>
@@ -93,9 +92,9 @@ export function SearchSelect({
             {allowEmpty ? (
               <OptionButton active={value === ""} label={emptyLabel} onClick={() => pick("")} muted />
             ) : null}
-            {filtered.map((o) => {
-              const header = o.group && o.group !== lastGroup ? o.group : null;
-              lastGroup = o.group;
+            {filtered.map((o, i) => {
+              // Заголовок группы — у первого элемента группы (чисто от индекса, без мутаций).
+              const header = o.group && o.group !== filtered[i - 1]?.group ? o.group : null;
               return (
                 <div key={o.value}>
                   {header ? (

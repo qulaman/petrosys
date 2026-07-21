@@ -105,7 +105,7 @@ export async function getActiveTemplate(
   contractType?: string | null,
 ): Promise<{ id: string; buffer: Buffer } | null> {
   const admin = createAdminClient();
-  let q = admin
+  const q = admin
     .from("document_templates")
     .select("id, file_url, contract_type")
     .eq("doc_type", docType)

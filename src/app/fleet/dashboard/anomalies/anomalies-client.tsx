@@ -72,7 +72,8 @@ export function AnomaliesClient({ rows }: { rows: AnomalyRow[] }) {
   const [statusFilter, setStatusFilter] = useState("open");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [vehicleFilter, setVehicleFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("all");
+  // Граница периода считается в обработчике клика (Date.now в рендере запрещён).
+  const [dateFilter, setDateFilter] = useState<{ key: string; minDate: string | null }>({ key: "all", minDate: null });
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -87,12 +88,7 @@ export function AnomaliesClient({ rows }: { rows: AnomalyRow[] }) {
 
   // Фильтры применяются последовательно; чипы типов считаются ПОСЛЕ статуса/машины/периода.
   const preType = useMemo(() => {
-    const minDate = (() => {
-      const f = DATE_FILTERS.find((d) => d.key === dateFilter);
-      if (!f?.days) return null;
-      const d = new Date(Date.now() - f.days * 864e5);
-      return d.toISOString().slice(0, 10);
-    })();
+    const minDate = dateFilter.minDate;
     return rows.filter((r) => {
       const s = effStatus(r);
       if (statusFilter === "open" ? !(s === "new" || s === "reviewed") : statusFilter !== "all" && s !== statusFilter) return false;
@@ -241,7 +237,18 @@ export function AnomaliesClient({ rows }: { rows: AnomalyRow[] }) {
         </div>
         <div className="flex flex-wrap gap-1">
           {DATE_FILTERS.map((f) => (
-            <Button key={f.key} size="sm" variant={dateFilter === f.key ? "secondary" : "ghost"} onClick={() => { setDateFilter(f.key); resetPage(); }}>
+            <Button
+              key={f.key}
+              size="sm"
+              variant={dateFilter.key === f.key ? "secondary" : "ghost"}
+              onClick={() => {
+                setDateFilter({
+                  key: f.key,
+                  minDate: f.days ? new Date(Date.now() - f.days * 864e5).toISOString().slice(0, 10) : null,
+                });
+                resetPage();
+              }}
+            >
               {f.label}
             </Button>
           ))}

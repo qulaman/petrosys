@@ -6,7 +6,6 @@ import type {
   Driver,
   FuelCard,
   Tanker,
-  TankerBalance,
   Vehicle,
 } from "@/lib/domain";
 

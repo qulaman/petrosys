@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Monitor, Moon, Sun, SunDim } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,25 +25,38 @@ function apply(mode: ThemeMode) {
   document.documentElement.classList.toggle("sun", mode === "sun");
 }
 
+// Режим темы как внешнее хранилище (localStorage) для useSyncExternalStore:
+// без setState-в-эффекте и каскадного ререндера при монтировании.
+const listeners = new Set<() => void>();
+function subscribe(cb: () => void): () => void {
+  listeners.add(cb);
+  window.addEventListener("storage", cb); // синхронизация между вкладками
+  return () => {
+    listeners.delete(cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+function getSnapshot(): ThemeMode {
+  return (localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode) || "auto";
+}
+function getServerSnapshot(): ThemeMode {
+  return "auto"; // на сервере выбора нет; фактическую тему ставит инлайн-скрипт в <head>
+}
+function setThemeMode(next: ThemeMode) {
+  localStorage.setItem(THEME_STORAGE_KEY, next);
+  apply(next);
+  for (const cb of listeners) cb();
+}
+
 /**
- * Трёхпозиционный переключатель темы: авто (по времени) → светлая → тёмная.
+ * Переключатель темы: авто (по времени) → светлая → тёмная → «солнце».
  * Выбор сохраняется в localStorage; начальную тему ставит инлайн-скрипт в <head>.
  */
 export function ThemeToggle() {
-  const [mode, setMode] = useState<ThemeMode>("auto");
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    const stored = (localStorage.getItem(THEME_STORAGE_KEY) as ThemeMode) || "auto";
-    setMode(stored);
-    setMounted(true);
-  }, []);
+  const mode = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   function cycle() {
-    const next = ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length];
-    setMode(next);
-    localStorage.setItem(THEME_STORAGE_KEY, next);
-    apply(next);
+    setThemeMode(ORDER[(ORDER.indexOf(mode) + 1) % ORDER.length]);
   }
 
   const Icon = ICON[mode];
@@ -57,9 +70,7 @@ export function ThemeToggle() {
       title={`${ru.theme.label}: ${LABEL[mode]}`}
     >
       <Icon className="size-4" />
-      <span className="hidden sm:inline">
-        {mounted ? LABEL[mode] : ru.theme.label}
-      </span>
+      <span className="hidden sm:inline">{LABEL[mode]}</span>
     </Button>
   );
 }
