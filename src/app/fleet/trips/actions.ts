@@ -180,14 +180,20 @@ export async function createTrip(input: z.infer<typeof schema>): Promise<Result>
   return { ok: true, id: data.id };
 }
 
-/** Отмена собственной записи (5-минутное окно проверяется RLS-политикой). */
+/**
+ * Отмена записи: учётчик — свою в 5-минутном окне, офис/админ — любую
+ * (обе политики в RLS). RLS фильтрует молча, поэтому различаем «удалено»
+ * и «право не дало» по числу удалённых строк.
+ */
 export async function deleteTrip(id: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
-  const { error } = await supabase.from("trip_records").delete().eq("id", id);
+  const { data, error } = await supabase.from("trip_records").delete().eq("id", id).select("id");
   if (error) {
     devError("deleteTrip", error);
     return { ok: false, error: error.message };
   }
+  if (!data?.length)
+    return { ok: false, error: "Отменить можно в течение 5 минут после записи — либо обратитесь в офис" };
   revalidatePath("/fleet/trips");
   return { ok: true };
 }

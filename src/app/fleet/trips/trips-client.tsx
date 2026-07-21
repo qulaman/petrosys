@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Check, CopyPlus, FilePlus2, RotateCw, ScanLine, Truck, X } from "lucide-react";
+import { AlertTriangle, Check, CopyPlus, FilePlus2, RotateCw, ScanLine, Trash2, Truck, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -148,14 +148,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
     }
   }
 
-  function recordTrip(vehicleId: string) {
-    setError(null);
-    if (!routeId || !lineup || enqueueBusy) return;
-    const last = lastEnqueueRef.current.get(vehicleId);
-    if (last && Date.now() - last < 90_000) {
-      const reg = vehById.get(vehicleId)?.reg_number ?? "Машина";
-      if (!window.confirm(`${reg} уже записана только что. Записать ещё один рейс?`)) return;
-    }
+  function proceedRecord(vehicleId: string) {
     const driverId = driverForVehicle(vehicleId);
     if (!driverId) {
       setError("Для машины нет активного водителя");
@@ -166,6 +159,25 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
       return;
     }
     void enqueueTrip(vehicleId, driverId, null);
+  }
+
+  function recordTrip(vehicleId: string) {
+    setError(null);
+    if (!routeId || !lineup || enqueueBusy) return;
+    const last = lastEnqueueRef.current.get(vehicleId);
+    if (last && Date.now() - last < 90_000) {
+      // Не браузерный confirm (дёргает страницу), а тост с кнопками внизу экрана.
+      const reg = vehById.get(vehicleId)?.reg_number ?? "Машина";
+      const secAgo = Math.max(1, Math.round((Date.now() - last) / 1000));
+      toast(`${reg} уже записана ${secAgo} сек назад`, {
+        description: "Записать ещё один рейс?",
+        action: { label: "Записать", onClick: () => proceedRecord(vehicleId) },
+        cancel: { label: "Отмена", onClick: () => {} },
+        duration: 6000,
+      });
+      return;
+    }
+    proceedRecord(vehicleId);
   }
 
   function onQrDetected(text: string) {
@@ -179,14 +191,23 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
       return;
     }
     if (!onLineSet.has(match.id)) {
-      // Машина ещё не выведена на линию — предлагаем вывести и сразу записать рейс.
+      // Машина ещё не выведена на линию — предлагаем тостом (без браузерного confirm).
       if (!lineup) return;
-      if (!window.confirm(`${match.reg_number} не на линии. Вывести на линию и записать рейс?`)) return;
-      start(async () => {
-        const res = await addLineupVehicle({ lineup_id: lineup.id, vehicle_id: match.id });
-        if (!res.ok) { toast.error(res.error ?? "Ошибка"); return; }
-        recordTrip(match.id);
-        router.refresh();
+      const lineupId = lineup.id;
+      toast(`${match.reg_number} не на линии`, {
+        description: "Вывести на линию и записать рейс?",
+        action: {
+          label: "Вывести и записать",
+          onClick: () =>
+            start(async () => {
+              const res = await addLineupVehicle({ lineup_id: lineupId, vehicle_id: match.id });
+              if (!res.ok) { toast.error(res.error ?? "Ошибка"); return; }
+              recordTrip(match.id);
+              router.refresh();
+            }),
+        },
+        cancel: { label: "Отмена", onClick: () => {} },
+        duration: 8000,
       });
       return;
     }
@@ -402,7 +423,6 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
             </div>
           ))}
           {recentTrips.map((t) => {
-            const canUndo = Date.now() - new Date(t.at).getTime() < 5 * 60 * 1000;
             return (
               <div key={t.id} className="flex items-center gap-2 p-3 text-sm">
                 <Check className="size-4 text-green-600" />
@@ -413,18 +433,19 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
                   </span>
                 </span>
                 <span className="text-xs text-muted-foreground">{fmtTime(t.at)}</span>
-                {canUndo ? (
-                  <button
-                    className="text-xs text-destructive underline"
-                    onClick={async () => {
-                      const res = await deleteTrip(t.id);
-                      if (res.ok) { toast.success("Рейс отменён"); router.refresh(); }
-                      else { devError("deleteTrip", res.error); toast.error(res.error ?? "Ошибка"); }
-                    }}
-                  >
-                    Отменить
-                  </button>
-                ) : null}
+                {/* Кнопка всегда видна: сервер сам решает — учётчику 5 минут, офису всегда. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 px-2 text-destructive"
+                  onClick={async () => {
+                    const res = await deleteTrip(t.id);
+                    if (res.ok) { toast.success("Рейс отменён"); router.refresh(); }
+                    else { devError("deleteTrip", res.error); toast.error(res.error ?? "Ошибка"); }
+                  }}
+                >
+                  <Trash2 className="size-4" /> Отменить
+                </Button>
               </div>
             );
           })}
