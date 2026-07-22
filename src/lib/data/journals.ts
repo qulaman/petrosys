@@ -1,6 +1,9 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentProfile } from "@/lib/auth/current-user";
 import { fetchAll } from "@/lib/supabase/fetch-all";
+import { loadClosedJournalIds } from "@/lib/data/money";
 
 export interface JournalFilters {
   fromISO: string;
@@ -16,21 +19,24 @@ export interface FilterOptions {
   contractors: { id: string; name: string }[];
   drivers: { id: string; full_name: string }[];
   routes: { id: string; name: string }[];
+  workTypes: { id: string; name: string }[];
 }
 
 export async function loadFilterOptions(): Promise<FilterOptions> {
   const supabase = await createClient();
-  const [v, c, d, r] = await Promise.all([
+  const [v, c, d, r, w] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number").order("reg_number"),
     supabase.from("contractors").select("id, name").order("name"),
     supabase.from("drivers").select("id, full_name").eq("is_active", true).order("full_name"),
     supabase.from("routes").select("id, name").eq("is_active", true).order("name"),
+    supabase.from("work_types").select("id, name").order("name"),
   ]);
   return {
     vehicles: (v.data ?? []) as FilterOptions["vehicles"],
     contractors: (c.data ?? []) as FilterOptions["contractors"],
     drivers: (d.data ?? []) as FilterOptions["drivers"],
     routes: (r.data ?? []) as FilterOptions["routes"],
+    workTypes: (w.data ?? []) as FilterOptions["workTypes"],
   };
 }
 
@@ -46,18 +52,31 @@ function byContractor<T extends { vehicle_id: string }>(
   return rows.filter((r) => ids.has(r.vehicle_id));
 }
 
+/** ФИО сотрудников (кто выдал/записал/внёс): RLS отдаёт только свой профиль — список через admin по org_id (инвариант №3). */
+async function loadProfileNames(): Promise<Map<string, string>> {
+  const current = await getCurrentProfile();
+  const orgId = current?.profile?.org_id ?? "";
+  const admin = createAdminClient();
+  const { data } = await admin.from("profiles").select("id, full_name").eq("org_id", orgId);
+  return new Map((data ?? []).map((p) => [p.id, p.full_name ?? "—"]));
+}
+
 // =============================== ГСМ ===============================
 export interface FuelJournalRow {
   id: string;
   at: string;
   reg: string;
   brand: string;
+  vehicle_id: string;
   driver: string;
   driver_id: string;
   liters: number;
   source: "card" | "tanker";
   source_name: string;
   odometer: number | null;
+  /** Кто оформил выдачу (заправщик). */
+  issuedBy: string;
+  geo: { lat: number; lng: number } | null;
   receipt_path: string | null;
   signature_path: string;
 }
@@ -68,7 +87,7 @@ export async function loadFuelJournal(f: JournalFilters): Promise<FuelJournalRow
   const rowsAll = fetchAll((from, to) => {
     let q = supabase
       .from("fuel_issues")
-      .select("id, created_at, liters, source_type, odometer, receipt_photo_url, driver_signature_url, vehicle_id, driver_id, fuel_card_id, tanker_id")
+      .select("id, created_at, liters, source_type, odometer, receipt_photo_url, driver_signature_url, vehicle_id, driver_id, fuel_card_id, tanker_id, issued_by, geo_lat, geo_lng")
       .gte("created_at", f.fromISO)
       .lt("created_at", f.toISO);
     if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
@@ -76,11 +95,12 @@ export async function loadFuelJournal(f: JournalFilters): Promise<FuelJournalRow
   });
 
   // Словари и основная выборка — одной волной; фильтр подрядчика — в JS.
-  const [veh, drv, cards, tankers, rows] = await Promise.all([
+  const [veh, drv, cards, tankers, profiles, rows] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, brand, contractor_id"),
     supabase.from("drivers").select("id, full_name"),
     supabase.from("fuel_cards").select("id, card_number"),
     supabase.from("tankers").select("id, name"),
+    loadProfileNames(),
     rowsAll,
   ]);
   const vMap = new Map((veh.data ?? []).map((v) => [v.id, v]));
@@ -97,6 +117,7 @@ export async function loadFuelJournal(f: JournalFilters): Promise<FuelJournalRow
       at: r.created_at,
       reg: v?.reg_number ?? "—",
       brand: v?.brand ?? "",
+      vehicle_id: r.vehicle_id,
       driver: dMap.get(r.driver_id) ?? "—",
       driver_id: r.driver_id,
       liters: Number(r.liters),
@@ -106,6 +127,8 @@ export async function loadFuelJournal(f: JournalFilters): Promise<FuelJournalRow
           ? cMap.get(r.fuel_card_id ?? "") ?? "Карта"
           : tMap.get(r.tanker_id ?? "") ?? "Бензовоз",
       odometer: r.odometer == null ? null : Number(r.odometer),
+      issuedBy: profiles.get(r.issued_by) ?? "—",
+      geo: r.geo_lat != null && r.geo_lng != null ? { lat: Number(r.geo_lat), lng: Number(r.geo_lng) } : null,
       receipt_path: r.receipt_photo_url,
       signature_path: r.driver_signature_url,
     };
@@ -113,15 +136,29 @@ export async function loadFuelJournal(f: JournalFilters): Promise<FuelJournalRow
 }
 
 // =============================== РЕЙСЫ ===============================
+const TRIP_SOURCE_LABELS: Record<string, string> = {
+  checker: "учётчик",
+  driver: "водитель",
+  gps: "GPS",
+};
+
 export interface TripJournalRow {
   id: string;
+  /** Фактическое время рейса: момент тапа (tapped_at), фолбэк — время записи. */
   at: string;
+  /** Запись пришла на сервер заметно позже тапа (offline-очередь). */
+  delayed: boolean;
+  sentAt: string;
   reg: string;
+  vehicle_id: string;
   driver: string;
   driver_id: string;
   route: string;
   route_id: string;
   has_signature: boolean;
+  /** Как записан рейс (учётчик/водитель/GPS) и кем. */
+  sourceLabel: string;
+  recordedBy: string;
   /** Карточка смены ещё не закрыта мастером — рейс черновой, в деньги не идёт. */
   draft: boolean;
 }
@@ -132,18 +169,19 @@ export async function loadTripJournal(f: JournalFilters): Promise<TripJournalRow
   const rowsAll = fetchAll((from, to) => {
     let q = supabase
       .from("trip_records")
-      .select("id, created_at, vehicle_id, driver_id, route_id, driver_signature_url, lineup_id")
+      .select("id, created_at, tapped_at, source, recorded_by, vehicle_id, driver_id, route_id, driver_signature_url, lineup_id")
       .gte("created_at", f.fromISO)
       .lt("created_at", f.toISO);
     if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
     return q.order("created_at", { ascending: false }).order("id").range(from, to);
   });
 
-  const [veh, drv, routes, openLineups, rows] = await Promise.all([
+  const [veh, drv, routes, openLineups, profiles, rows] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, contractor_id"),
     supabase.from("drivers").select("id, full_name"),
     supabase.from("routes").select("id, name"),
     supabase.from("trip_lineups").select("id").eq("status", "open"),
+    loadProfileNames(),
     rowsAll,
   ]);
   const vMap = new Map((veh.data ?? []).map((v) => [v.id, v]));
@@ -152,17 +190,25 @@ export async function loadTripJournal(f: JournalFilters): Promise<TripJournalRow
   const openIds = new Set((openLineups.data ?? []).map((l) => l.id));
 
   const data = byContractor(rows, f.contractorId, veh.data ?? []);
-  return data.map((r) => ({
-    id: r.id,
-    at: r.created_at,
-    reg: vMap.get(r.vehicle_id)?.reg_number ?? "—",
-    driver: dMap.get(r.driver_id) ?? "—",
-    driver_id: r.driver_id,
-    route: rMap.get(r.route_id) ?? "—",
-    route_id: r.route_id,
-    has_signature: !!r.driver_signature_url,
-    draft: !!r.lineup_id && openIds.has(r.lineup_id),
-  }));
+  return data.map((r) => {
+    const at = r.tapped_at ?? r.created_at;
+    return {
+      id: r.id,
+      at,
+      sentAt: r.created_at,
+      delayed: r.tapped_at != null && Date.parse(r.created_at) - Date.parse(r.tapped_at) > 5 * 60_000,
+      reg: vMap.get(r.vehicle_id)?.reg_number ?? "—",
+      vehicle_id: r.vehicle_id,
+      driver: dMap.get(r.driver_id) ?? "—",
+      driver_id: r.driver_id,
+      route: rMap.get(r.route_id) ?? "—",
+      route_id: r.route_id,
+      has_signature: !!r.driver_signature_url,
+      sourceLabel: TRIP_SOURCE_LABELS[r.source] ?? r.source,
+      recordedBy: profiles.get(r.recorded_by) ?? "—",
+      draft: !!r.lineup_id && openIds.has(r.lineup_id),
+    };
+  });
 }
 
 // =============================== СМЕНЫ ===============================
@@ -171,9 +217,19 @@ export interface ShiftJournalRow {
   date: string;
   shift: "day" | "night";
   reg: string;
+  vehicle_id: string;
   driver: string;
+  driver_id: string;
   hours: number;
   work_type: string;
+  work_type_id: string | null;
+  /** Смена участвует в деньгах: журнал закрыт (или legacy-запись без журнала). */
+  inMoney: boolean;
+  /** Какой мастер внёс запись. */
+  itrName: string;
+  createdAt: string;
+  /** Запись внесена сильно позже даты смены (задним числом). */
+  backdated: boolean;
   driver_signature_path: string | null;
   itr_signature_path: string | null;
 }
@@ -184,33 +240,51 @@ export async function loadShiftJournal(f: JournalFilters): Promise<ShiftJournalR
   const rowsAll = fetchAll((from, to) => {
     let q = supabase
       .from("shift_records")
-      .select("id, shift_date, shift_type, hours, vehicle_id, driver_id, work_type_id, driver_signature_url, itr_signature_url")
+      .select("id, shift_date, shift_type, hours, vehicle_id, driver_id, work_type_id, driver_signature_url, itr_signature_url, journal_id, itr_id, created_at")
       .gte("shift_date", f.fromDate)
       .lte("shift_date", f.toDate);
     if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
     return q.order("shift_date", { ascending: false }).order("id").range(from, to);
   });
 
-  const [veh, drv, wt, rows] = await Promise.all([
+  const [veh, drv, wt, profiles, rows] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, contractor_id"),
     supabase.from("drivers").select("id, full_name"),
     supabase.from("work_types").select("id, name"),
+    loadProfileNames(),
     rowsAll,
   ]);
   const vMap = new Map((veh.data ?? []).map((v) => [v.id, v]));
   const dMap = new Map((drv.data ?? []).map((d) => [d.id, d.full_name]));
   const wMap = new Map((wt.data ?? []).map((w) => [w.id, w.name]));
 
+  // Статусы журналов: деньги считают только закрытые (legacy без журнала — считаются).
+  const journalIds = [...new Set(rows.map((r) => r.journal_id).filter((x): x is string => !!x))];
+  const closed = await loadClosedJournalIds(supabase, journalIds);
+
   const data = byContractor(rows, f.contractorId, veh.data ?? []);
-  return data.map((r) => ({
-    id: r.id,
-    date: r.shift_date,
-    shift: r.shift_type as "day" | "night",
-    reg: vMap.get(r.vehicle_id)?.reg_number ?? "—",
-    driver: dMap.get(r.driver_id) ?? "—",
-    hours: Number(r.hours),
-    work_type: r.work_type_id ? wMap.get(r.work_type_id) ?? "—" : "—",
-    driver_signature_path: r.driver_signature_url,
-    itr_signature_path: r.itr_signature_url,
-  }));
+  return data.map((r) => {
+    // Ночная смена штатно вводится наутро — задним числом считаем ввод позже чем на 1 день.
+    const createdDate = r.created_at.slice(0, 10);
+    const backdated =
+      (Date.parse(`${createdDate}T00:00:00Z`) - Date.parse(`${r.shift_date}T00:00:00Z`)) / 864e5 > 1;
+    return {
+      id: r.id,
+      date: r.shift_date,
+      shift: r.shift_type as "day" | "night",
+      reg: vMap.get(r.vehicle_id)?.reg_number ?? "—",
+      vehicle_id: r.vehicle_id,
+      driver: dMap.get(r.driver_id) ?? "—",
+      driver_id: r.driver_id,
+      hours: Number(r.hours),
+      work_type: r.work_type_id ? wMap.get(r.work_type_id) ?? "—" : "—",
+      work_type_id: r.work_type_id,
+      inMoney: !r.journal_id || closed.has(r.journal_id),
+      itrName: profiles.get(r.itr_id) ?? "—",
+      createdAt: r.created_at,
+      backdated,
+      driver_signature_path: r.driver_signature_url,
+      itr_signature_path: r.itr_signature_url,
+    };
+  });
 }

@@ -30,7 +30,7 @@ export default async function TripJournalPage({ searchParams }: { searchParams: 
     <AppShell requiredRoles={["office", "admin"]} title="Журнал рейсов">
       <div className="flex flex-col gap-4">
         <JournalFilters options={options} />
-        <TripJournal rows={rows} isAdmin={isAdmin} drivers={options.drivers} routes={options.routes} />
+        <TripJournal rows={rows} isAdmin={isAdmin} drivers={options.drivers} routes={options.routes} vehicles={options.vehicles} />
       </div>
     </AppShell>
   );

@@ -19,3 +19,21 @@ export async function getSignedUrl(
   if (error) return null;
   return data.signedUrl;
 }
+
+/** Пакет signed URL одним запросом (миниатюры подписей в журналах). */
+export async function getSignedUrls(
+  bucket: Bucket,
+  paths: string[],
+  expiresInSeconds = 3600,
+): Promise<Record<string, string>> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage
+    .from(bucket)
+    .createSignedUrls(paths, expiresInSeconds);
+  if (error) return {};
+  const out: Record<string, string> = {};
+  for (const item of data ?? []) {
+    if (item.signedUrl && item.path) out[item.path] = item.signedUrl;
+  }
+  return out;
+}

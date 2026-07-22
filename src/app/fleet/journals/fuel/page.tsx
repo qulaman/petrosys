@@ -30,7 +30,7 @@ export default async function FuelJournalPage({ searchParams }: { searchParams: 
     <AppShell requiredRoles={["office", "admin"]} title="Журнал выдачи ГСМ">
       <div className="flex flex-col gap-4">
         <JournalFilters options={options} />
-        <FuelJournal rows={rows} isAdmin={isAdmin} drivers={options.drivers} />
+        <FuelJournal rows={rows} isAdmin={isAdmin} drivers={options.drivers} vehicles={options.vehicles} />
       </div>
     </AppShell>
   );

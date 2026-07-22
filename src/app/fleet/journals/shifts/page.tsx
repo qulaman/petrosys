@@ -30,7 +30,7 @@ export default async function ShiftJournalPage({ searchParams }: { searchParams:
     <AppShell requiredRoles={["office", "admin"]} title="Журнал смен (табель)">
       <div className="flex flex-col gap-4">
         <JournalFilters options={options} />
-        <ShiftJournal rows={rows} isAdmin={isAdmin} />
+        <ShiftJournal rows={rows} isAdmin={isAdmin} drivers={options.drivers} vehicles={options.vehicles} workTypes={options.workTypes} />
       </div>
     </AppShell>
   );

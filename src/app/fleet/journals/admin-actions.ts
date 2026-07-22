@@ -34,6 +34,7 @@ const fuelEditSchema = z.object({
   liters: z.number().positive().max(100000),
   odometer: z.number().nonnegative().nullable(),
   driver_id: zUuid,
+  vehicle_id: zUuid,
 });
 
 export async function adminUpdateFuelIssue(
@@ -47,7 +48,7 @@ export async function adminUpdateFuelIssue(
   const supabase = await createClient();
   const { error } = await supabase
     .from("fuel_issues")
-    .update({ liters: p.data.liters, odometer: p.data.odometer, driver_id: p.data.driver_id })
+    .update({ liters: p.data.liters, odometer: p.data.odometer, driver_id: p.data.driver_id, vehicle_id: p.data.vehicle_id })
     .eq("id", p.data.id);
   if (error) {
     devError("adminUpdateFuelIssue", error);
@@ -72,6 +73,7 @@ const tripEditSchema = z.object({
   id: zUuid,
   driver_id: zUuid,
   route_id: zUuid,
+  vehicle_id: zUuid,
 });
 
 export async function adminUpdateTrip(
@@ -85,7 +87,7 @@ export async function adminUpdateTrip(
   const supabase = await createClient();
   const { error } = await supabase
     .from("trip_records")
-    .update({ driver_id: p.data.driver_id, route_id: p.data.route_id })
+    .update({ driver_id: p.data.driver_id, route_id: p.data.route_id, vehicle_id: p.data.vehicle_id })
     .eq("id", p.data.id);
   if (error) return { ok: false, error: error.message };
   refreshJournals();
@@ -103,6 +105,61 @@ export async function adminDeleteTrip(id: string): Promise<Result> {
 }
 
 // ------------------------------- Смены -------------------------------
+const shiftEditSchema = z.object({
+  id: zUuid,
+  hours: z.number().positive().max(24),
+  driver_id: zUuid,
+  work_type_id: zUuid.nullable(),
+  vehicle_id: zUuid,
+});
+
+/**
+ * Правка смены администратором с соблюдением инвариантов табеля:
+ * закрытый журнал неизменяем (сначала переоткрыть в Табеле), а изменение
+ * часов/водителя сбрасывает подпись работника — она стояла под другими данными.
+ */
+export async function adminUpdateShiftRecord(
+  input: z.infer<typeof shiftEditSchema>,
+): Promise<Result> {
+  const gate = await requireAdmin();
+  if (!gate.ok) return gate;
+  const p = shiftEditSchema.safeParse(input);
+  if (!p.success) return zodFail(p.error);
+
+  const supabase = await createClient();
+  const { data: old } = await supabase
+    .from("shift_records")
+    .select("hours, driver_id, journal_id")
+    .eq("id", p.data.id)
+    .single();
+  if (!old) return { ok: false, error: "Запись не найдена" };
+
+  if (old.journal_id) {
+    const { data: j } = await supabase.from("shift_journals").select("status").eq("id", old.journal_id).single();
+    if (j?.status === "closed")
+      return { ok: false, error: "Журнал смены закрыт — переоткройте его на экране «Табель» (кнопка администратора), затем правьте" };
+  }
+
+  const signatureReset = Number(old.hours) !== p.data.hours || old.driver_id !== p.data.driver_id;
+  const { error } = await supabase
+    .from("shift_records")
+    .update({
+      hours: p.data.hours,
+      driver_id: p.data.driver_id,
+      work_type_id: p.data.work_type_id,
+      vehicle_id: p.data.vehicle_id,
+      ...(signatureReset ? { driver_signature_url: null } : {}),
+    })
+    .eq("id", p.data.id);
+  if (error) {
+    devError("adminUpdateShiftRecord", error);
+    return { ok: false, error: error.message };
+  }
+  refreshJournals();
+  revalidatePath("/fleet/shifts");
+  return { ok: true };
+}
+
 export async function adminDeleteShiftRecord(id: string): Promise<Result> {
   const gate = await requireAdmin();
   if (!gate.ok) return gate;
