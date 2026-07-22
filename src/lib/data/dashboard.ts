@@ -16,6 +16,10 @@ export interface FeedEvent {
   vehicle_id: string;
   driver_id: string;
   detail: string; // «200 л · карта» / «рейс» / «10 ч»
+  /** Числа для агрегатов групп ленты. */
+  liters?: number;
+  source?: "card" | "tanker";
+  hours?: number;
 }
 
 export interface TankerBalanceRow {
@@ -166,18 +170,22 @@ export async function loadTodayData(): Promise<TodayData> {
   }
   const hoursToday = shiftRows.reduce((s, r) => s + Number(r.hours), 0);
 
+  // Вся лента дня (сотни строк — некритично): клиент группирует серии и часы.
   const events: FeedEvent[] = [
     ...fuelRows.map((r) => ({
       id: r.id, kind: "fuel" as const, at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id,
       detail: `${Number(r.liters)} л · ${r.source_type === "card" ? "карта" : "бензовоз"}`,
+      liters: Number(r.liters),
+      source: (r.source_type === "card" ? "card" : "tanker") as "card" | "tanker",
     })),
     ...tripRows.map((r) => ({
       id: r.id, kind: "trip" as const, at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id, detail: "рейс",
     })),
     ...shiftRows.map((r) => ({
-      id: r.id, kind: "shift" as const, at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id, detail: `${Number(r.hours)} ч`,
+      id: r.id, kind: "shift" as const, at: r.created_at, vehicle_id: r.vehicle_id, driver_id: r.driver_id,
+      detail: `${Number(r.hours)} ч`, hours: Number(r.hours),
     })),
-  ].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 25);
+  ].sort((a, b) => (a.at < b.at ? 1 : -1));
 
   const nameById = new Map((tankersRes.data ?? []).map((t) => [t.id, t.name]));
   const now = Date.now();
