@@ -74,6 +74,28 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const [showAllTrips, setShowAllTrips] = useState(false);
   // Лента = рейсы ТЕКУЩЕЙ смены, свежие сверху (старые дни — в журнале рейсов).
   const shiftFeed = useMemo(() => [...data.shiftTrips].reverse(), [data.shiftTrips]);
+
+  // Живое «сейчас» для мини-дашборда смены (темп, простой машин) — тикает раз в 30 с.
+  const [nowTs, setNowTs] = useState(0);
+  useEffect(() => {
+    setNowTs(Date.now());
+    const t = setInterval(() => setNowTs(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Сводка смены для шапки-дашборда.
+  const shiftInfo = useMemo(() => {
+    const total = data.shiftTrips.length;
+    const activeVehicles = new Set(data.shiftTrips.map((t) => t.vehicle_id)).size;
+    const first = data.shiftTrips[0]?.at;
+    const hours = first && nowTs ? Math.max((nowTs - Date.parse(first)) / 3_600_000, 0.25) : null;
+    return {
+      total,
+      activeVehicles,
+      perHour: hours && total ? Math.round((total / hours) * 10) / 10 : null,
+    };
+  }, [data.shiftTrips, nowTs]);
+
   const tripsByVehicle = useMemo(() => {
     const m = new Map<string, { count: number; lastId: string }>();
     for (const t of data.shiftTrips) {
@@ -114,6 +136,21 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
     });
   }, [vehicles, onLineSet, sortIdleFirst, shiftStats]);
   const offLineVehicles = vehicles.filter((v) => !onLineSet.has(v.id));
+
+  // Машины на линии, у которых давно не было рейса (> 45 мин) — сигнал мастеру.
+  const idleMinutes = (vehicleId: string): number | null => {
+    const s = shiftStats[vehicleId];
+    if (!s || !nowTs) return null;
+    return Math.round((nowTs - Date.parse(s.lastAt)) / 60_000);
+  };
+  const staleVehicles = useMemo(() => {
+    if (!nowTs) return [];
+    return vehicles
+      .filter((v) => onLineSet.has(v.id) && shiftStats[v.id])
+      .map((v) => ({ v, idle: Math.round((nowTs - Date.parse(shiftStats[v.id].lastAt)) / 60_000) }))
+      .filter((x) => x.idle > 45)
+      .sort((a, b) => b.idle - a.idle);
+  }, [vehicles, onLineSet, shiftStats, nowTs]);
 
   const nav = useNavProgress();
   function setParams(date: string, shift: string) {
@@ -384,18 +421,74 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         </div>
       ) : null}
 
-      {/* Карточка смены: черновик до подписи мастера */}
-      <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
-        <div>
-          <p className="text-xs text-muted-foreground">Карточка смены — черновик</p>
-          <p className="font-semibold tabular-nums">Рейсов за смену: {shiftTrips.length}</p>
+      {/* Мини-дашборд карточки смены: цифры, сигналы и ВСЕ действия карточки — наверху. */}
+      <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium uppercase text-muted-foreground">Карточка смены · черновик</p>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant={reviewOpen ? "default" : "outline"}
+              onClick={() => setReviewOpen((v) => !v)}
+            >
+              <Check className="size-4" /> Проверить и закрыть
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8 text-destructive"
+              aria-label="Удалить карточку смены"
+              disabled={pending}
+              onClick={() =>
+                toast("Удалить карточку смены целиком?", {
+                  description: `Будут удалены все рейсы (${shiftTrips.length}) и перечень машин. Смену можно будет создать заново.`,
+                  action: {
+                    label: "Удалить карточку",
+                    onClick: () => act(() => deleteTripJournal(lineup.id), "Карточка смены удалена"),
+                  },
+                  cancel: { label: "Отмена", onClick: () => {} },
+                  duration: 8000,
+                })
+              }
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
         </div>
-        <Button
-          variant={reviewOpen ? "default" : "outline"}
-          onClick={() => setReviewOpen((v) => !v)}
-        >
-          <Check className="size-4" /> Проверить и закрыть
-        </Button>
+
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-md border bg-background p-2 text-center">
+            <p className="text-2xl font-bold tabular-nums">{shiftInfo.total}</p>
+            <p className="text-xs text-muted-foreground">рейсов</p>
+          </div>
+          <div className="rounded-md border bg-background p-2 text-center">
+            <p className="text-2xl font-bold tabular-nums">
+              {shiftInfo.activeVehicles}<span className="text-base font-medium text-muted-foreground">/{onLineVehicles.length}</span>
+            </p>
+            <p className="text-xs text-muted-foreground">машин ездило</p>
+          </div>
+          <div className="rounded-md border bg-background p-2 text-center">
+            <p className="text-2xl font-bold tabular-nums">{shiftInfo.perHour ?? "—"}</p>
+            <p className="text-xs text-muted-foreground">рейсов/час</p>
+          </div>
+        </div>
+
+        {staleVehicles.length ? (
+          <div className="flex items-start gap-1.5 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-sm">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+            <p>
+              Давно без рейса:{" "}
+              {staleVehicles.slice(0, 4).map((x, i) => (
+                <span key={x.v.id}>
+                  {i > 0 ? ", " : ""}
+                  <span className="font-semibold">{x.v.reg_number}</span>{" "}
+                  <span className="text-muted-foreground">({x.idle} мин)</span>
+                </span>
+              ))}
+              {staleVehicles.length > 4 ? ` и ещё ${staleVehicles.length - 4}` : ""}
+            </p>
+          </div>
+        ) : null}
       </div>
 
       {reviewOpen ? (
@@ -452,13 +545,15 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         noVehiclesText="На линии пока нет машин — выведите их ниже."
         tileInfo={(v) => {
           const s = shiftStats[v.id];
+          const idle = idleMinutes(v.id);
+          const stale = idle != null && idle > 45;
           return (
             <span className="ml-2 flex shrink-0 flex-col items-end">
               <span className={`rounded-full px-2 py-0.5 text-sm font-bold tabular-nums ${s ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                 {s?.count ?? 0}
               </span>
-              <span className="mt-0.5 text-xs tabular-nums text-muted-foreground">
-                {s ? fmtTime(s.lastAt) : "—"}
+              <span className={`mt-0.5 text-xs tabular-nums ${stale ? "font-semibold text-amber-600" : "text-muted-foreground"}`}>
+                {s ? (stale ? `${idle} мин назад` : fmtTime(s.lastAt)) : "—"}
               </span>
             </span>
           );
@@ -499,27 +594,6 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
               />
             </div>
 
-            <div className="border-t pt-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive"
-                disabled={pending}
-                onClick={() =>
-                  toast("Удалить карточку смены целиком?", {
-                    description: `Будут удалены все рейсы (${shiftTrips.length}) и перечень машин. Смену можно будет создать заново.`,
-                    action: {
-                      label: "Удалить карточку",
-                      onClick: () => act(() => deleteTripJournal(lineup.id), "Карточка смены удалена"),
-                    },
-                    cancel: { label: "Отмена", onClick: () => {} },
-                    duration: 8000,
-                  })
-                }
-              >
-                <Trash2 className="size-4" /> Удалить карточку смены
-              </Button>
-            </div>
           </div>
         ) : null}
       </div>
