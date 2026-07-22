@@ -4,8 +4,8 @@ import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AlertTriangle, BookOpen, Calculator, ClipboardList, CreditCard, Droplet, FileSignature,
-  FileText, FileType2, Fuel, Home, LayoutDashboard, Loader2, Mountain, QrCode, Settings,
-  SlidersHorizontal, Truck, User, Users, type LucideIcon,
+  FileText, FileType2, Fuel, History, Home, LayoutDashboard, Loader2, Mountain, QrCode,
+  Settings, SlidersHorizontal, Truck, User, Users, type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +41,7 @@ const ROUTE_ICONS: [string, LucideIcon][] = [
   ["/fleet/office/settlement", Calculator],
   ["/fleet/office/documents", FileText],
   ["/fleet/admin/settings", SlidersHorizontal],
+  ["/fleet/admin/audit", History],
   ["/fleet/admin/users", Users],
   ["/fleet/admin/qr", QrCode],
   ["/fleet/admin/contracts", FileSignature],

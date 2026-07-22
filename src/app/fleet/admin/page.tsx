@@ -1,7 +1,7 @@
 import Link from "next/link";
 import {
   Building2, Calculator, ClipboardX, CreditCard, FileSignature, FileType2, Fuel, Gavel,
-  Mountain, QrCode, Route, SlidersHorizontal, Truck, Users, Wrench, type LucideIcon,
+  History, Mountain, QrCode, Route, SlidersHorizontal, Truck, Users, Wrench, type LucideIcon,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { getCurrentProfile } from "@/lib/auth/current-user";
@@ -62,6 +62,12 @@ export default async function AdminHome() {
           className="flex items-center gap-2 rounded-lg border p-4 font-medium hover:bg-accent"
         >
           <SlidersHorizontal className="size-5" /> Настройки детекторов
+        </Link>
+        <Link
+          href="/fleet/admin/audit"
+          className="flex items-center gap-2 rounded-lg border p-4 font-medium hover:bg-accent"
+        >
+          <History className="size-5" /> Журнал изменений
         </Link>
         <Link
           href="/fleet/admin/avr"
