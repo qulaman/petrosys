@@ -68,6 +68,14 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   // Двухэтапный ввод: экран проверки карточки смены и подпись мастера на закрытии.
   const [reviewOpen, setReviewOpen] = useState(false);
   const [signClose, setSignClose] = useState(false);
+  // Подтверждение повторного рейса ПРЯМО в плитке машины (не тост): сама плитка
+  // превращается в вопрос; сбрасывается кнопкой, другим тапом или через 6 секунд.
+  const [confirmRepeat, setConfirmRepeat] = useState<{ vehicleId: string; label: string } | null>(null);
+  useEffect(() => {
+    if (!confirmRepeat) return;
+    const t = setTimeout(() => setConfirmRepeat(null), 6000);
+    return () => clearTimeout(t);
+  }, [confirmRepeat]);
   // Пакетное удаление в ленте: режим выбора + отмеченные записи.
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -78,9 +86,14 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   // Живое «сейчас» для мини-дашборда смены (темп, простой машин) — тикает раз в 30 с.
   const [nowTs, setNowTs] = useState(0);
   useEffect(() => {
-    setNowTs(Date.now());
-    const t = setInterval(() => setNowTs(Date.now()), 30_000);
-    return () => clearInterval(t);
+    // Первый тик — асинхронно (rAF): синхронный setState в теле эффекта запрещён линтом.
+    const tick = () => setNowTs(Date.now());
+    const raf = requestAnimationFrame(tick);
+    const t = setInterval(tick, 30_000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(t);
+    };
   }, []);
 
   // Сводка смены для шапки-дашборда.
@@ -220,17 +233,12 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
     if (!routeId || !lineup || enqueueBusy) return;
     const last = lastEnqueueRef.current.get(vehicleId);
     if (last && Date.now() - last < 90_000) {
-      // Не браузерный confirm (дёргает страницу), а тост с кнопками внизу экрана.
-      const reg = vehById.get(vehicleId)?.reg_number ?? "Машина";
+      // Подтверждение прямо в плитке машины — взгляд не уходит с места тапа.
       const secAgo = Math.max(1, Math.round((Date.now() - last) / 1000));
-      toast(`${reg} уже записана ${secAgo} сек назад`, {
-        description: "Записать ещё один рейс?",
-        action: { label: "Записать", onClick: () => proceedRecord(vehicleId) },
-        cancel: { label: "Отмена", onClick: () => {} },
-        duration: 6000,
-      });
+      setConfirmRepeat({ vehicleId, label: `Записана ${secAgo} сек назад. Ещё рейс?` });
       return;
     }
+    setConfirmRepeat(null);
     proceedRecord(vehicleId);
   }
 
@@ -543,6 +551,28 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         onSelect={(v) => recordTrip(v.id)}
         emptyText="Самосвалы не найдены"
         noVehiclesText="На линии пока нет машин — выведите их ниже."
+        tileConfirm={(v) => {
+          if (confirmRepeat?.vehicleId !== v.id) return null;
+          return (
+            <div className="flex w-full flex-col gap-1.5">
+              <p className="text-sm font-semibold leading-tight">
+                {v.reg_number} <span className="font-normal text-muted-foreground">{confirmRepeat.label}</span>
+              </p>
+              <div className="flex gap-1.5">
+                <Button
+                  size="sm"
+                  className="h-9 flex-1"
+                  onClick={() => { setConfirmRepeat(null); proceedRecord(v.id); }}
+                >
+                  Записать
+                </Button>
+                <Button size="sm" variant="outline" className="h-9 flex-1" onClick={() => setConfirmRepeat(null)}>
+                  Отмена
+                </Button>
+              </div>
+            </div>
+          );
+        }}
         tileInfo={(v) => {
           const s = shiftStats[v.id];
           const idle = idleMinutes(v.id);

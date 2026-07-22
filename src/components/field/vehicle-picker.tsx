@@ -26,6 +26,11 @@ interface VehiclePickerProps {
   tileTrailing?: ReactNode;
   /** Инфо-блок в правой части плитки, зависящий от машины (счётчик рейсов и т.п.). */
   tileInfo?: (vehicle: Vehicle) => ReactNode;
+  /**
+   * Подтверждение на месте: если для машины возвращён контент, плитка рендерит
+   * его вместо обычного содержимого (вопрос + кнопки прямо в сетке, без тостов).
+   */
+  tileConfirm?: (vehicle: Vehicle) => ReactNode | null;
   /** Закрепить фильтры (вкладки + поиск) под шапкой при листании длинного списка. */
   stickyFilters?: boolean;
   /** Блок над вкладками внутри закреплённой области (например, источник топлива). */
@@ -47,6 +52,7 @@ export function VehiclePicker({
   searchTrailing,
   tileTrailing,
   tileInfo,
+  tileConfirm,
   stickyFilters = false,
   header,
 }: VehiclePickerProps) {
@@ -106,26 +112,39 @@ export function VehiclePicker({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        {shown.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            disabled={disabled}
-            onClick={() => onSelect(v)}
-            className={`flex ${large ? "min-h-20" : "min-h-16"} items-center justify-between rounded-lg border p-3 text-left active:bg-accent`}
-          >
-            <span className="min-w-0">
-              <span className={`block truncate font-bold tracking-tight ${large ? "text-xl" : "text-lg"}`}>
-                {v.reg_number}
+        {shown.map((v) => {
+          const confirm = tileConfirm?.(v);
+          if (confirm) {
+            return (
+              <div
+                key={v.id}
+                className={`flex ${large ? "min-h-20" : "min-h-16"} items-center rounded-lg border-2 border-primary bg-primary/5 p-2`}
+              >
+                {confirm}
+              </div>
+            );
+          }
+          return (
+            <button
+              key={v.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onSelect(v)}
+              className={`flex ${large ? "min-h-20" : "min-h-16"} items-center justify-between rounded-lg border p-3 text-left active:bg-accent`}
+            >
+              <span className="min-w-0">
+                <span className={`block truncate font-bold tracking-tight ${large ? "text-xl" : "text-lg"}`}>
+                  {v.reg_number}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {sub === "brand" ? v.brand : vehicleTypeLabel(v.vehicle_type)}
+                </span>
               </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {sub === "brand" ? v.brand : vehicleTypeLabel(v.vehicle_type)}
-              </span>
-            </span>
-            {tileInfo?.(v)}
-            {tileTrailing}
-          </button>
-        ))}
+              {tileInfo?.(v)}
+              {tileTrailing}
+            </button>
+          );
+        })}
         {shown.length === 0 ? (
           <p className="col-span-2 text-sm text-muted-foreground">
             {vehicles.length === 0 && noVehiclesText ? noVehiclesText : emptyText}
