@@ -28,24 +28,8 @@ interface TripPayload {
   vehicle_id: string;
   driver_id: string;
   driver_signature_url: string | null;
-  geo_lat: number | null;
-  geo_lng: number | null;
-}
-
-function getGeoFast(): Promise<{ lat: number; lng: number } | null> {
-  const geo = new Promise<{ lat: number; lng: number } | null>((resolve) => {
-    if (typeof navigator === "undefined" || !navigator.geolocation)
-      return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => resolve(null),
-      { timeout: 2500, maximumAge: 300000, enableHighAccuracy: false },
-    );
-  });
-  // Обходной таймаут: пока висит браузерный запрос разрешения, timeout из опций
-  // не действует и колбэки не вызываются вовсе — рейс не должен ждать вечно.
-  const cap = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
-  return Promise.race([geo, cap]);
+  /** Момент тапа на телефоне — «время рейса» даже при отложенной отправке. */
+  tapped_at: string;
 }
 
 export function TripsClient({ data }: { data: TripsScreenData }) {
@@ -63,7 +47,6 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const [pending, start] = useTransition();
   // Защита от дабл-тапа: плитки блокируются на время постановки рейса в очередь,
   // повторный рейс той же машины в коротком окне — только с подтверждением.
-  const [enqueueBusy, setEnqueueBusy] = useState(false);
   const lastEnqueueRef = useRef<Map<string, number>>(new Map());
   // Двухэтапный ввод: экран проверки карточки смены и подпись мастера на закрытии.
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -110,19 +93,16 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   }, [data.shiftTrips, nowTs]);
 
   const tripsByVehicle = useMemo(() => {
-    const m = new Map<string, { count: number; lastId: string }>();
+    const m = new Map<string, { count: number; lastId: string; times: string[] }>();
     for (const t of data.shiftTrips) {
-      const cur = m.get(t.vehicle_id);
-      m.set(t.vehicle_id, { count: (cur?.count ?? 0) + 1, lastId: t.id });
+      const cur = m.get(t.vehicle_id) ?? { count: 0, lastId: t.id, times: [] };
+      cur.count += 1;
+      cur.lastId = t.id;
+      cur.times.push(t.at);
+      m.set(t.vehicle_id, cur);
     }
     return m;
   }, [data.shiftTrips]);
-
-  // Прогрев разрешения геолокации при открытии экрана: промпт появляется в
-  // спокойный момент, а не посреди фиксации первого рейса.
-  useEffect(() => {
-    void getGeoFast();
-  }, []);
 
   const submit = useCallback((p: TripPayload) => createTrip(p), []);
   const onSuccess = useCallback(() => router.refresh(), [router]);
@@ -191,28 +171,22 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
     return pool[0]?.id ?? drivers[0]?.id ?? null;
   }
 
-  async function enqueueTrip(vehicleId: string, driverId: string, signaturePath: string | null) {
+  function enqueueTrip(vehicleId: string, driverId: string, signaturePath: string | null) {
     if (!routeId || !lineup) return;
     const v = vehById.get(vehicleId);
-    setEnqueueBusy(true);
-    try {
-      const geo = await getGeoFast();
-      add(
-        {
-          lineup_id: lineup.id,
-          route_id: routeId,
-          vehicle_id: vehicleId,
-          driver_id: driverId,
-          driver_signature_url: signaturePath,
-          geo_lat: geo?.lat ?? null,
-          geo_lng: geo?.lng ?? null,
-        },
-        `${v?.reg_number ?? ""} · ${fmtTime(new Date().toISOString())}`,
-      );
-      lastEnqueueRef.current.set(vehicleId, Date.now());
-    } finally {
-      setEnqueueBusy(false);
-    }
+    const tappedAt = new Date().toISOString();
+    add(
+      {
+        lineup_id: lineup.id,
+        route_id: routeId,
+        vehicle_id: vehicleId,
+        driver_id: driverId,
+        driver_signature_url: signaturePath,
+        tapped_at: tappedAt,
+      },
+      `${v?.reg_number ?? ""} · ${fmtTime(tappedAt)}`,
+    );
+    lastEnqueueRef.current.set(vehicleId, Date.now());
   }
 
   function proceedRecord(vehicleId: string) {
@@ -225,12 +199,12 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
       setPendingSig({ vehicle_id: vehicleId, driver_id: driverId });
       return;
     }
-    void enqueueTrip(vehicleId, driverId, null);
+    enqueueTrip(vehicleId, driverId, null);
   }
 
   function recordTrip(vehicleId: string) {
     setError(null);
-    if (!routeId || !lineup || enqueueBusy) return;
+    if (!routeId || !lineup) return;
     const last = lastEnqueueRef.current.get(vehicleId);
     if (last && Date.now() - last < 90_000) {
       // Подтверждение прямо в плитке машины — взгляд не уходит с места тапа.
@@ -507,7 +481,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
             vehicles={vehicles}
             lineupVehicleIds={lineupVehicleIds}
             editable
-            busy={pending || enqueueBusy}
+            busy={pending}
             onPlus={(vid) => proceedRecord(vid)}
             onMinus={async (lastId) => {
               const res = await deleteTrip(lastId);
@@ -547,7 +521,6 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         large
         sub="brand"
         stickyFilters
-        disabled={enqueueBusy}
         onSelect={(v) => recordTrip(v.id)}
         emptyText="Самосвалы не найдены"
         noVehiclesText="На линии пока нет машин — выведите их ниже."
@@ -768,7 +741,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
             setPendingSig(null);
             try {
               const path = await uploadSignature(data.orgId, dataUrl);
-              await enqueueTrip(sig.vehicle_id, sig.driver_id, path);
+              enqueueTrip(sig.vehicle_id, sig.driver_id, path);
             } catch (err) {
               devError("trip-signature", err);
               setError("Не удалось загрузить подпись");
@@ -800,7 +773,10 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   );
 }
 
-/** Сводка карточки смены: рейсы по машинам, в режиме проверки — с корректировкой ±. */
+/**
+ * Сводка карточки смены: рейсы по машинам, в режиме проверки — с корректировкой ±.
+ * Тап по строке раскрывает времена тапов каждого рейса машины.
+ */
 function ShiftSummary({
   tripsByVehicle,
   vehicles,
@@ -810,7 +786,7 @@ function ShiftSummary({
   onPlus,
   onMinus,
 }: {
-  tripsByVehicle: Map<string, { count: number; lastId: string }>;
+  tripsByVehicle: Map<string, { count: number; lastId: string; times: string[] }>;
   vehicles: TripsScreenData["vehicles"];
   lineupVehicleIds: string[];
   editable?: boolean;
@@ -818,32 +794,62 @@ function ShiftSummary({
   onPlus?: (vehicleId: string) => void;
   onMinus?: (lastTripId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const ids = new Set([...lineupVehicleIds, ...tripsByVehicle.keys()]);
   const rows = vehicles
     .filter((v) => ids.has(v.id))
     .map((v) => ({ v, stat: tripsByVehicle.get(v.id) }))
     .sort((a, b) => (b.stat?.count ?? 0) - (a.stat?.count ?? 0) || a.v.reg_number.localeCompare(b.v.reg_number, "ru"));
   const total = [...tripsByVehicle.values()].reduce((s, x) => s + x.count, 0);
+  const toggle = (id: string) =>
+    setExpanded((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <div className="flex flex-col divide-y rounded-lg border">
       {rows.map(({ v, stat }) => (
-        <div key={v.id} className="flex items-center gap-2 p-2.5 text-sm">
-          <span className="flex-1 font-medium">{v.reg_number}</span>
-          {editable && stat ? (
-            <Button variant="outline" size="icon" className="size-9" disabled={busy} aria-label="Убрать рейс"
-              onClick={() => onMinus?.(stat.lastId)}>
-              −
-            </Button>
-          ) : null}
-          <span className={`w-10 text-center text-lg font-bold tabular-nums ${stat ? "" : "text-muted-foreground"}`}>
-            {stat?.count ?? 0}
-          </span>
-          {editable ? (
-            <Button variant="outline" size="icon" className="size-9" disabled={busy} aria-label="Добавить рейс"
-              onClick={() => onPlus?.(v.id)}>
-              +
-            </Button>
+        <div key={v.id} className="flex flex-col p-2.5">
+          <div className="flex items-center gap-2 text-sm">
+            <button
+              type="button"
+              className="flex-1 text-left font-medium"
+              onClick={() => stat && toggle(v.id)}
+            >
+              {v.reg_number}
+              {stat ? (
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                  {expanded.has(v.id) ? "скрыть времена" : "времена ▾"}
+                </span>
+              ) : null}
+            </button>
+            {editable && stat ? (
+              <Button variant="outline" size="icon" className="size-9" disabled={busy} aria-label="Убрать рейс"
+                onClick={() => onMinus?.(stat.lastId)}>
+                −
+              </Button>
+            ) : null}
+            <span className={`w-10 text-center text-lg font-bold tabular-nums ${stat ? "" : "text-muted-foreground"}`}>
+              {stat?.count ?? 0}
+            </span>
+            {editable ? (
+              <Button variant="outline" size="icon" className="size-9" disabled={busy} aria-label="Добавить рейс"
+                onClick={() => onPlus?.(v.id)}>
+                +
+              </Button>
+            ) : null}
+          </div>
+          {stat && expanded.has(v.id) ? (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {stat.times.map((at, i) => (
+                <span key={i} className="rounded bg-muted px-1.5 py-0.5 text-xs tabular-nums">
+                  {fmtTime(at)}
+                </span>
+              ))}
+            </div>
           ) : null}
         </div>
       ))}

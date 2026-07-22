@@ -136,8 +136,11 @@ const schema = z.object({
   vehicle_id: zUuid,
   driver_id: zUuid,
   driver_signature_url: z.string().nullable(),
-  geo_lat: z.number().nullable(),
-  geo_lng: z.number().nullable(),
+  /** Момент тапа на телефоне (клиентское время; created_at — время доставки). */
+  tapped_at: z.string().datetime({ offset: true }).nullable().optional(),
+  // geo оставлены для совместимости со старыми записями в outbox — больше не собираются
+  geo_lat: z.number().nullable().optional(),
+  geo_lng: z.number().nullable().optional(),
 });
 
 export async function createTrip(input: z.infer<typeof schema>): Promise<Result> {
@@ -172,8 +175,9 @@ export async function createTrip(input: z.infer<typeof schema>): Promise<Result>
       vehicle_id: d.vehicle_id,
       driver_id: d.driver_id,
       driver_signature_url: d.driver_signature_url,
-      geo_lat: d.geo_lat,
-      geo_lng: d.geo_lng,
+      tapped_at: d.tapped_at ?? null,
+      geo_lat: d.geo_lat ?? null,
+      geo_lng: d.geo_lng ?? null,
     })
     .select("id")
     .single();

@@ -106,7 +106,7 @@ export async function loadTripsData(
       : Promise.resolve({ data: null }),
     supabase
       .from("trip_records")
-      .select("id, vehicle_id, driver_id, created_at")
+      .select("id, vehicle_id, driver_id, created_at, tapped_at")
       .gte("created_at", w.fromISO)
       .lt("created_at", w.toISO)
       .order("created_at"),
@@ -130,11 +130,14 @@ export async function loadTripsData(
     }
   }
 
+  // Время рейса — момент тапа учётчика (tapped_at); created_at — время доставки
+  // на сервер, используется как фолбэк для старых записей.
   const shiftStats: Record<string, { count: number; lastAt: string }> = {};
   for (const t of shiftTripsRes.data ?? []) {
-    const s = shiftStats[t.vehicle_id] ?? { count: 0, lastAt: t.created_at };
+    const at = t.tapped_at ?? t.created_at;
+    const s = shiftStats[t.vehicle_id] ?? { count: 0, lastAt: at };
     s.count += 1;
-    s.lastAt = t.created_at;
+    if (at > s.lastAt) s.lastAt = at;
     shiftStats[t.vehicle_id] = s;
   }
 
@@ -150,12 +153,14 @@ export async function loadTripsData(
     lineupVehicleIds: (lineupVehRes.data ?? []).map((r: { vehicle_id: string }) => r.vehicle_id),
     previous,
     shiftStats,
-    shiftTrips: (shiftTripsRes.data ?? []).map((t) => ({
-      id: t.id,
-      vehicle_id: t.vehicle_id,
-      driver_id: t.driver_id,
-      at: t.created_at,
-    })),
+    shiftTrips: (shiftTripsRes.data ?? [])
+      .map((t) => ({
+        id: t.id,
+        vehicle_id: t.vehicle_id,
+        driver_id: t.driver_id,
+        at: t.tapped_at ?? t.created_at,
+      }))
+      .sort((a, b) => (a.at < b.at ? -1 : 1)),
     canReopen: ["office", "admin"].some((r) => current?.profile?.roles.includes(r)),
   };
 }

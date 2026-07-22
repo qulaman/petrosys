@@ -1439,6 +1439,7 @@ export type Database = {
           recorded_by: string
           route_id: string
           source: string
+          tapped_at: string | null
           vehicle_id: string
         }
         Insert: {
@@ -1453,6 +1454,7 @@ export type Database = {
           recorded_by?: string
           route_id: string
           source?: string
+          tapped_at?: string | null
           vehicle_id: string
         }
         Update: {
@@ -1467,6 +1469,7 @@ export type Database = {
           recorded_by?: string
           route_id?: string
           source?: string
+          tapped_at?: string | null
           vehicle_id?: string
         }
         Relationships: [
