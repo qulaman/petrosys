@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  Activity, AlertTriangle, ChevronDown, Coins, Droplet, ExternalLink, Fuel, MapPin, Radio, Timer, Truck,
+  Activity, AlertTriangle, ChevronDown, Coins, Droplet, ExternalLink, Fuel, Radio, Timer, Truck,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -451,32 +451,6 @@ export function TodayTab({ data }: { data: TodayData }) {
         ) : null}
       </section>
 
-      {/* Последние гео-точки: по одной на машину — учёт идёт по всему объекту */}
-      {data.geoPoints.length ? (
-        <section className="flex flex-col gap-2">
-          <p className="text-sm font-medium">
-            Где техника <span className="text-muted-foreground">· последняя гео-точка каждой машины за сегодня</span>
-          </p>
-          <div className="flex flex-col divide-y rounded-lg border">
-            {data.geoPoints.map((g) => (
-              <a
-                key={g.reg}
-                href={`https://maps.google.com/?q=${g.lat},${g.lng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 p-3 text-sm hover:bg-accent"
-              >
-                <MapPin className="size-4 shrink-0 text-muted-foreground" />
-                <span className="font-medium">{g.reg}</span>
-                <span className="text-muted-foreground">{g.kind === "fuel" ? "заправка" : "рейс"} · {fmtTime(g.at)}</span>
-                <span className="ml-auto flex items-center gap-1 text-xs text-primary">
-                  Карта <ExternalLink className="size-3" />
-                </span>
-              </a>
-            ))}
-          </div>
-        </section>
-      ) : null}
     </div>
   );
 }

@@ -20,18 +20,6 @@ import { createFuelIssue } from "./actions";
 
 const LAST_SOURCE_KEY = "qo-last-source";
 
-function getGeo(): Promise<{ lat: number; lng: number } | null> {
-  return new Promise((resolve) => {
-    if (typeof navigator === "undefined" || !navigator.geolocation)
-      return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      (p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-      () => resolve(null),
-      { timeout: 5000, enableHighAccuracy: false },
-    );
-  });
-}
-
 export function IssueForm({ data }: { data: FuelIssueData }) {
   const { orgId, cards, tankers, vehicles, drivers, balances, lastDriverByVehicle } =
     data;
@@ -118,9 +106,6 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
           hasReceipt: !!receiptFile, hasSignature: !!sigDataUrl,
         });
 
-        const geo = await getGeo();
-        devLog("issue-form", "гео:", geo);
-
         const signature_path = await uploadSignature(orgId, sigDataUrl);
         devLog("issue-form", "подпись загружена:", signature_path);
 
@@ -139,8 +124,6 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
           odometer: odometer ? parseFloat(odometer) : null,
           receipt_path,
           signature_path,
-          geo_lat: geo?.lat ?? null,
-          geo_lng: geo?.lng ?? null,
         };
         devLog("issue-form", "payload → createFuelIssue:", payload);
 

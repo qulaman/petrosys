@@ -122,7 +122,6 @@ export interface TripJournalRow {
   route: string;
   route_id: string;
   has_signature: boolean;
-  geo: string | null;
   /** Карточка смены ещё не закрыта мастером — рейс черновой, в деньги не идёт. */
   draft: boolean;
 }
@@ -133,7 +132,7 @@ export async function loadTripJournal(f: JournalFilters): Promise<TripJournalRow
   const rowsAll = fetchAll((from, to) => {
     let q = supabase
       .from("trip_records")
-      .select("id, created_at, vehicle_id, driver_id, route_id, driver_signature_url, geo_lat, geo_lng, lineup_id")
+      .select("id, created_at, vehicle_id, driver_id, route_id, driver_signature_url, lineup_id")
       .gte("created_at", f.fromISO)
       .lt("created_at", f.toISO);
     if (f.vehicleId) q = q.eq("vehicle_id", f.vehicleId);
@@ -162,7 +161,6 @@ export async function loadTripJournal(f: JournalFilters): Promise<TripJournalRow
     route: rMap.get(r.route_id) ?? "—",
     route_id: r.route_id,
     has_signature: !!r.driver_signature_url,
-    geo: r.geo_lat != null && r.geo_lng != null ? `${r.geo_lat}, ${r.geo_lng}` : null,
     draft: !!r.lineup_id && openIds.has(r.lineup_id),
   }));
 }

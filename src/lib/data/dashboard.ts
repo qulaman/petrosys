@@ -36,13 +36,6 @@ export interface AttentionItem {
   detected_at: string;
   reg: string | null;
 }
-export interface GeoPoint {
-  kind: "fuel" | "trip";
-  reg: string;
-  at: string;
-  lat: number;
-  lng: number;
-}
 
 /** План/факт выхода самосвалов на линию (по выводам учётчика за сегодня). */
 export interface LineupToday {
@@ -66,8 +59,6 @@ export interface TodayData {
   prev: { trips: number; hours: number; liters: number; accrued: number };
   lineup: LineupToday;
   attention: AttentionItem[];
-  /** Последняя гео-точка каждой машины с записями за сегодня. */
-  geoPoints: GeoPoint[];
   recentEvents: FeedEvent[];
   tankerBalances: TankerBalanceRow[];
   vehicleNames: Record<string, string>;
@@ -94,8 +85,8 @@ export async function loadTodayData(): Promise<TodayData> {
     await Promise.all([
       supabase.from("vehicles").select("id, reg_number, is_active, vehicle_type, contract_id"),
       supabase.from("drivers").select("id, full_name"),
-      fetchAll((f, t) => supabase.from("fuel_issues").select("id, created_at, liters, source_type, vehicle_id, driver_id, geo_lat, geo_lng").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
-      fetchAll((f, t) => supabase.from("trip_records").select("id, created_at, vehicle_id, driver_id, geo_lat, geo_lng").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
+      fetchAll((f, t) => supabase.from("fuel_issues").select("id, created_at, liters, source_type, vehicle_id, driver_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
+      fetchAll((f, t) => supabase.from("trip_records").select("id, created_at, vehicle_id, driver_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("shift_records").select("id, created_at, vehicle_id, driver_id, hours").eq("shift_date", period.fromDate).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("fuel_issues").select("liters").gte("created_at", prevFromISO).lt("created_at", prevCutISO).order("id").range(f, t)),
       fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at").gte("created_at", prevFromISO).lt("created_at", prevCutISO).order("id").range(f, t)),
@@ -218,19 +209,6 @@ export async function loadTodayData(): Promise<TodayData> {
     };
   });
 
-  // Последняя гео-точка каждой машины за сегодня (учёт идёт по всему объекту).
-  const lastByVehicle = new Map<string, GeoPoint>();
-  const considerGeo = (vehicleId: string, kind: "fuel" | "trip", at: string, lat: unknown, lng: unknown) => {
-    if (lat == null || lng == null) return;
-    const cur = lastByVehicle.get(vehicleId);
-    if (!cur || cur.at < at) {
-      lastByVehicle.set(vehicleId, { kind, reg: vehicleNames[vehicleId] ?? "—", at, lat: Number(lat), lng: Number(lng) });
-    }
-  };
-  for (const r of fuelRows) considerGeo(r.vehicle_id, "fuel", r.created_at, r.geo_lat, r.geo_lng);
-  for (const r of tripRows) considerGeo(r.vehicle_id, "trip", r.created_at, r.geo_lat, r.geo_lng);
-  const geoPoints: GeoPoint[] = [...lastByVehicle.values()].sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 20);
-
   return {
     orgId,
     date: period.fromDate,
@@ -244,7 +222,6 @@ export async function loadTodayData(): Promise<TodayData> {
     prev,
     lineup,
     attention,
-    geoPoints,
     recentEvents: events,
     tankerBalances,
     vehicleNames,

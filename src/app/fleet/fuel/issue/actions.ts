@@ -15,8 +15,9 @@ const schema = z.object({
   odometer: z.number().nonnegative().nullable(),
   receipt_path: z.string().nullable(),
   signature_path: z.string().min(1),
-  geo_lat: z.number().nullable(),
-  geo_lng: z.number().nullable(),
+  // геолокация больше не собирается; поля оставлены для совместимости outbox
+  geo_lat: z.number().nullable().optional(),
+  geo_lng: z.number().nullable().optional(),
 });
 
 export type CreateFuelIssueInput = z.infer<typeof schema>;
@@ -61,8 +62,8 @@ export async function createFuelIssue(
       odometer: d.odometer,
       receipt_photo_url: d.receipt_path,
       driver_signature_url: d.signature_path,
-      geo_lat: d.geo_lat,
-      geo_lng: d.geo_lng,
+      geo_lat: d.geo_lat ?? null,
+      geo_lng: d.geo_lng ?? null,
     })
     .select("id")
     .single();

@@ -65,9 +65,9 @@ export function TripJournal({
   function exportCsv() {
     downloadCsv(
       "журнал-рейсов.csv",
-      ["Время", "Машина", "Водитель", "Маршрут", "Подпись", "Гео"],
+      ["Время", "Машина", "Водитель", "Маршрут", "Подпись"],
       rows.map((r) => [
-        fmtDateTime(r.at), r.reg, r.driver, r.route, r.has_signature ? "да" : "нет", r.geo,
+        fmtDateTime(r.at), r.reg, r.driver, r.route, r.has_signature ? "да" : "нет",
       ]),
     );
   }
@@ -89,7 +89,6 @@ export function TripJournal({
               <th className="px-3 py-2 font-medium">Водитель</th>
               <th className="px-3 py-2 font-medium">Маршрут</th>
               <th className="px-3 py-2 font-medium">Подпись</th>
-              <th className="px-3 py-2 font-medium">Гео</th>
               {isAdmin ? <th className="px-3 py-2" /> : null}
             </tr>
           </thead>
@@ -108,7 +107,6 @@ export function TripJournal({
                 <td className="px-3 py-2">{r.driver}</td>
                 <td className="px-3 py-2">{r.route}</td>
                 <td className="px-3 py-2">{r.has_signature ? "да" : "—"}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground">{r.geo ?? "—"}</td>
                 {isAdmin ? (
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-1">
