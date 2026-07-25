@@ -161,27 +161,6 @@ export async function loadVolumeTabData(): Promise<VolumeTabData> {
   };
 }
 
-/** Журнал сводок для страницы ввода (последние дни, сгруппировано по дате). */
-export interface FactRow {
-  id: string;
-  work_date: string;
-  shift_type: string | null;
-  flow: string | null;
-  trips_count: number | null;
-  volume_m3: number | null;
-  day_status: string;
-  note: string | null;
-}
-
-export async function loadRecentFacts(limit = 120): Promise<FactRow[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("production_facts")
-    .select("id, work_date, shift_type, flow, trips_count, volume_m3, day_status, note")
-    .order("work_date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []) as FactRow[];
-}
+// Список сводок переехал в журнал объёма — см. loadVolumeJournal в lib/data/journals.ts.
 
 export { addDays };

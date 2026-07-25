@@ -25,6 +25,8 @@ const TABLE_LABELS: Record<string, string> = {
   routes: "маршрут",
   shift_records: "смена табеля",
   shift_journals: "журнал смен",
+  production_facts: "сводка объёма",
+  downtime_records: "простой",
   work_types: "вид работ",
   vehicles: "техника",
   drivers: "водитель",
@@ -71,6 +73,12 @@ const FIELD_LABELS: Record<string, string> = {
   penalty_date: "дата штрафа",
   resolution_note: "комментарий",
   volume_m3: "объём, м³",
+  flow: "поток",
+  trips_count: "рейсов",
+  day_status: "статус дня",
+  note: "примечание",
+  fault_side: "вина",
+  downtime_date: "дата простоя",
   distance_km: "расстояние, км",
   vehicle_id: "машина",
   driver_id: "водитель",
@@ -188,6 +196,9 @@ export async function loadAuditPage(f: AuditFilters): Promise<AuditPage> {
       case "shift_journals": return `${base} · ${row.shift_date ?? ""} ${row.shift_type === "night" ? "ночь" : "день"}`.trim();
       case "trip_lineups": return `${base} · ${row.work_date ?? ""} ${row.shift_type === "night" ? "ночь" : "день"}`.trim();
       case "trip_lineup_vehicles": return `${base} · ${reg ?? "—"}`;
+      case "production_facts":
+        return `${base} · ${row.work_date ?? ""} ${row.shift_type ? (row.shift_type === "night" ? "ночь" : "день") : "сутки"} ${row.volume_m3 ?? ""} м³`.trim();
+      case "downtime_records": return `${base} · ${reg ?? "—"} ${row.downtime_date ?? ""}`.trim();
       case "vehicles": return `${base} · ${row.reg_number ?? ""}`;
       case "drivers": return `${base} · ${row.full_name ?? ""}`;
       case "contractors": return `${base} · ${row.name ?? ""}`;

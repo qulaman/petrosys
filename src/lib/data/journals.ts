@@ -288,3 +288,80 @@ export async function loadShiftJournal(f: JournalFilters): Promise<ShiftJournalR
     };
   });
 }
+
+// =============================== ОБЪЁМ ===============================
+export interface VolumeJournalRow {
+  id: string;
+  work_date: string;
+  /** null — сводка за сутки целиком. */
+  shift_type: "day" | "night" | null;
+  flow: string | null;
+  trips_count: number | null;
+  volume_m3: number | null;
+  day_status: string;
+  note: string | null;
+  enteredBy: string;
+  createdAt: string;
+  /**
+   * За эту дату и поток есть и суточная запись, и сменные — прогноз сложит их
+   * вместе и получит двойной объём. Помечаем, чтобы офис разобрался.
+   */
+  conflict: boolean;
+}
+
+export interface VolumeJournalFilters {
+  fromDate: string;
+  toDate: string;
+  /** "day" | "night" | "total" (за сутки) | null — все. */
+  shift?: string | null;
+  flow?: string | null;
+}
+
+/**
+ * Журнал сводок объёма. В отличие от остальных журналов фильтруется по
+ * календарной `work_date` (дата смены), а не по времени создания записи.
+ */
+export async function loadVolumeJournal(f: VolumeJournalFilters): Promise<VolumeJournalRow[]> {
+  const supabase = await createClient();
+
+  const rowsAll = fetchAll((from, to) => {
+    let q = supabase
+      .from("production_facts")
+      .select("id, work_date, shift_type, flow, trips_count, volume_m3, day_status, note, created_by, created_at")
+      .gte("work_date", f.fromDate)
+      .lte("work_date", f.toDate);
+    if (f.shift === "total") q = q.is("shift_type", null);
+    else if (f.shift) q = q.eq("shift_type", f.shift);
+    if (f.flow) q = q.eq("flow", f.flow);
+    return q.order("work_date", { ascending: false }).order("created_at", { ascending: false }).range(from, to);
+  });
+
+  const [profiles, rows] = await Promise.all([loadProfileNames(), rowsAll]);
+
+  // Дата+поток, где смешаны суточная и сменные записи (двойной счёт в прогнозе).
+  const byDateFlow = new Map<string, { daily: boolean; shifted: boolean }>();
+  for (const r of rows) {
+    const key = `${r.work_date}|${r.flow ?? "-"}`;
+    const cur = byDateFlow.get(key) ?? { daily: false, shifted: false };
+    if (r.shift_type) cur.shifted = true;
+    else cur.daily = true;
+    byDateFlow.set(key, cur);
+  }
+
+  return rows.map((r) => {
+    const mix = byDateFlow.get(`${r.work_date}|${r.flow ?? "-"}`);
+    return {
+      id: r.id,
+      work_date: r.work_date,
+      shift_type: r.shift_type as "day" | "night" | null,
+      flow: r.flow,
+      trips_count: r.trips_count,
+      volume_m3: r.volume_m3 == null ? null : Number(r.volume_m3),
+      day_status: r.day_status,
+      note: r.note,
+      enteredBy: profiles.get(r.created_by) ?? "—",
+      createdAt: r.created_at,
+      conflict: Boolean(mix?.daily && mix?.shifted),
+    };
+  });
+}

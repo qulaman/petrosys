@@ -1,23 +1,27 @@
+import Link from "next/link";
+import { BookOpen } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { getCurrentProfile } from "@/lib/auth/current-user";
 import { aqtobeToday } from "@/lib/tz";
-import { loadRecentFacts } from "@/lib/data/forecast";
-import { FactList, VolumeForm } from "./volume-form";
+import { VolumeForm } from "./volume-form";
 
 export const metadata = { title: "Объём — сводки" };
 
-/** Ввод дневных сводок геодезиста (м³): форма + журнал последних записей. */
+/**
+ * Ввод дневных сводок геодезиста (м³). Список, правки и выгрузка живут
+ * в журнале объёма — здесь только быстрый ввод с телефона.
+ */
 export default async function VolumePage() {
-  const [rows, current] = await Promise.all([loadRecentFacts(), getCurrentProfile()]);
-  const roles = current?.profile?.roles ?? [];
-  const canDelete = ["itr", "office", "admin"].some((r) => roles.includes(r));
-
   return (
     <AppShell requiredRoles={["itr", "office", "admin"]} title="Объём — сводки">
       <div className="flex flex-col gap-4">
         <VolumeForm today={aqtobeToday()} />
-        <h3 className="text-sm font-medium">Последние сводки</h3>
-        <FactList rows={rows} canDelete={canDelete} />
+        <Link
+          href="/fleet/journals/volume"
+          className="flex items-center gap-2 rounded-lg border p-4 font-medium hover:bg-accent"
+        >
+          <BookOpen className="size-5 text-muted-foreground" />
+          Журнал объёма — все сводки, правка и выгрузка
+        </Link>
       </div>
     </AppShell>
   );

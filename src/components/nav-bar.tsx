@@ -38,6 +38,7 @@ const ROUTE_ICONS: [string, LucideIcon][] = [
   ["/fleet/journals/fuel", Droplet],
   ["/fleet/journals/shifts", ClipboardList],
   ["/fleet/journals/trips", Truck],
+  ["/fleet/journals/volume", Mountain],
   ["/fleet/journals", BookOpen],
   ["/fleet/office/settlement", Calculator],
   ["/fleet/office/documents", FileText],
