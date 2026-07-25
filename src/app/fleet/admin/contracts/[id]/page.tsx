@@ -5,6 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { loadContractDetail } from "@/lib/data/contracts-admin";
 import { ContractDetailView } from "./contract-detail";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const data = await loadContractDetail(id);
+  return { title: data ? `Договор ${data.contract.number}` : "Договор" };
+}
+
 export default async function ContractDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();

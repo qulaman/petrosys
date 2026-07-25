@@ -3,6 +3,7 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { vehicleTypeLabel } from "@/lib/domain";
+import { TIME_ZONE } from "@/lib/format";
 
 /**
  * Рендер docx-шаблона с плейсхолдерами (docxtemplater).
@@ -59,7 +60,7 @@ export function contractTemplateData(d: ContractTemplateInput): Record<string, u
     billing_period: d.billing_period === "15days" ? "каждые 15 дней" : "календарный месяц",
     valid_from: d.valid_from,
     valid_to: d.valid_to ?? "бессрочно",
-    today: new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Aqtobe" }).format(new Date()),
+    today: new Intl.DateTimeFormat("ru-RU", { timeZone: TIME_ZONE }).format(new Date()),
     c_name: d.contractor.name,
     c_bin: d.contractor.bin ?? "",
     c_address: d.contractor.legal_address ?? "",

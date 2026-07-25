@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchSelect } from "@/components/ui/search-select";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { fmtMoney } from "@/lib/format";
 import { VEHICLE_TYPE_LABELS, vehicleTypeLabel, type VehicleType } from "@/lib/domain";
 import type { ContractDetail } from "@/lib/data/contracts-admin";
@@ -25,6 +26,7 @@ export function ContractDetailView({
   const c = data.contract;
   const isEquipment = c.contract_type === "equipment";
   const [pending, start] = useTransition();
+  const { confirm, confirmDialog } = useConfirm();
 
   // --- договор ---
   const [form, setForm] = useState({
@@ -79,10 +81,26 @@ export function ContractDetailView({
     });
   }
 
-  function delPrice(id: string) {
+  // Позиции прайса и цены ГСМ участвуют в расчёте АВР задним числом —
+  // удаление меняет уже посчитанные суммы, поэтому спрашиваем.
+  async function delPrice(id: string) {
+    const ok = await confirm({
+      title: "Удалить позицию прайса?",
+      description: "Ставка исчезнет из расчёта АВР за все периоды, где она действовала. Действие необратимо.",
+      confirmLabel: "Удалить",
+      destructive: true,
+    });
+    if (!ok) return;
     start(async () => { const r = await deletePriceRow(id, c.id); if (r.ok) { toast.success("Удалено"); router.refresh(); } else toast.error(r.error); });
   }
-  function delFuel(id: string) {
+  async function delFuel(id: string) {
+    const ok = await confirm({
+      title: "Удалить цену ГСМ?",
+      description: "Цена исчезнет из расчёта удержаний за топливо в этом договоре. Действие необратимо.",
+      confirmLabel: "Удалить",
+      destructive: true,
+    });
+    if (!ok) return;
     start(async () => { const r = await deleteFuelPrice(id, c.id); if (r.ok) { toast.success("Удалено"); router.refresh(); } else toast.error(r.error); });
   }
 
@@ -164,7 +182,7 @@ export function ContractDetailView({
                   <td className="px-3 py-2">{p.vehicle_id ? data.vehicles.find((v) => v.id === p.vehicle_id)?.reg_number ?? "—" : "весь вид"}</td>
                   <td className="px-3 py-2">{p.valid_from}</td>
                   <td className="px-3 py-2 text-muted-foreground">{p.note ?? ""}</td>
-                  <td className="px-3 py-2 text-right"><button onClick={() => delPrice(p.id)}><Trash2 className="size-4 text-destructive" /></button></td>
+                  <td className="px-3 py-2 text-right"><button onClick={() => delPrice(p.id)} aria-label="Удалить позицию прайса" title="Удалить позицию прайса" className="inline-flex size-11 items-center justify-center -my-2"><Trash2 className="size-4 text-destructive" /></button></td>
                 </tr>
               ))}
               {data.prices.length === 0 ? <tr><td colSpan={7} className="px-3 py-4 text-center text-muted-foreground">Ставок нет</td></tr> : null}
@@ -204,7 +222,7 @@ export function ContractDetailView({
                   <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(f.price_per_liter)}</td>
                   <td className="px-3 py-2">{f.valid_from}</td>
                   <td className="px-3 py-2 text-muted-foreground">{f.note ?? ""}</td>
-                  <td className="px-3 py-2 text-right"><button onClick={() => delFuel(f.id)}><Trash2 className="size-4 text-destructive" /></button></td>
+                  <td className="px-3 py-2 text-right"><button onClick={() => delFuel(f.id)} aria-label="Удалить цену ГСМ" title="Удалить цену ГСМ" className="inline-flex size-11 items-center justify-center -my-2"><Trash2 className="size-4 text-destructive" /></button></td>
                 </tr>
               ))}
               {data.fuelPrices.length === 0 ? <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">Цен нет — удержания ГСМ не будет</td></tr> : null}
@@ -253,6 +271,7 @@ export function ContractDetailView({
           Допник — по ставкам/цене ГСМ, действующим с выбранной даты. Готовые файлы — в разделе «Документы».
         </p>
       </section>
+      {confirmDialog}
     </div>
   );
 }

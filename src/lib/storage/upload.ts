@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { compressImage } from "@/lib/images/compress";
 
 /** dataURL (canvas.toDataURL) → Blob для загрузки. */
 export function dataUrlToBlob(dataUrl: string): Blob {
@@ -44,49 +45,15 @@ export async function uploadSignature(
   return path;
 }
 
-/**
- * Сжатие фото на телефоне перед загрузкой: длинная сторона ≤ maxSide,
- * JPEG ~q0.8 — чек остаётся читаемым, но ~250 КБ вместо 1–4 МБ с камеры.
- * Любая ошибка сжатия → оригинал (запись важнее оптимизации).
- */
-async function compressImage(
-  file: File,
-  maxSide = 1600,
-  quality = 0.8,
-): Promise<{ blob: Blob; ext: string; type: string }> {
-  const original = {
-    blob: file as Blob,
-    ext: file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg",
-    type: file.type || "image/jpeg",
-  };
-  try {
-    const bmp = await createImageBitmap(file);
-    const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
-    const w = Math.max(1, Math.round(bmp.width * scale));
-    const h = Math.max(1, Math.round(bmp.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return original;
-    ctx.drawImage(bmp, 0, 0, w, h);
-    bmp.close();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-    // Если выигрыша нет (уже маленький файл) — оставляем оригинал.
-    if (!blob || blob.size >= file.size) return original;
-    return { blob, ext: "jpg", type: "image/jpeg" };
-  } catch {
-    return original;
-  }
-}
-
 /** Загружает фото чека (со сжатием на клиенте). Возвращает путь в бакете receipts. */
 export async function uploadReceipt(orgId: string, file: File): Promise<string> {
   const supabase = createClient();
-  const { blob, ext, type } = await compressImage(file);
+  // Повторный вызов на уже сжатом файле ничего не делает — см. compressImage.
+  const blob = await compressImage(file);
+  const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
   const path = objectPath(orgId, ext);
   const { error } = await supabase.storage.from("receipts").upload(path, blob, {
-    contentType: type,
+    contentType: blob.type || "image/jpeg",
     upsert: false,
   });
   if (error) throw error;

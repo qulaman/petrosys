@@ -12,7 +12,8 @@ import { cn } from "@/lib/utils";
 const ICONS: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   fuel: Droplet,
-  tanker: Truck,
+  // Бензовоз — Fuel: в заголовке экрана уже стоит она, а Truck занят «Рейсами».
+  tanker: Fuel,
   shifts: ClipboardList,
   trips: Truck,
   volume: Mountain,

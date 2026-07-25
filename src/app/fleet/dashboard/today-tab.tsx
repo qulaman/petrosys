@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { EmptyState } from "@/components/ui/empty-state";
-import { fmtInt, fmtLiters, fmtMoney, fmtTime } from "@/lib/format";
+import { TIME_ZONE, fmtInt, fmtLiters, fmtMoney, fmtTime } from "@/lib/format";
 import { ANOMALY_LABELS } from "@/lib/anomalies";
 import { aqtobeDate } from "@/lib/tz";
 import { cn } from "@/lib/utils";
@@ -19,7 +19,7 @@ function Delta({ now, prev, fmt = fmtInt }: { now: number; prev: number; fmt?: (
   if (prev === 0 && now === 0) return null;
   return (
     <span
-      className={cn("text-xs tabular-nums", diff > 0 ? "text-green-600" : diff < 0 ? "text-destructive" : "text-muted-foreground")}
+      className={cn("text-xs tabular-nums", diff > 0 ? "text-success" : diff < 0 ? "text-destructive" : "text-muted-foreground")}
       title="Сравнение со вчерашним днём до этого же часа"
     >
       {diff > 0 ? "▲" : diff < 0 ? "▼" : "•"} {diff > 0 ? "+" : ""}{fmt(diff)} ко вчера к этому часу
@@ -85,7 +85,7 @@ interface FeedGroup {
 }
 type FeedItem = { type: "hour"; label: string } | ({ type: "group" } & FeedGroup);
 
-const hourFmt = new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Aqtobe", hour: "2-digit" });
+const hourFmt = new Intl.DateTimeFormat("ru-RU", { timeZone: TIME_ZONE, hour: "2-digit" });
 
 function buildFeed(events: FeedEvent[]): FeedItem[] {
   const groups: FeedGroup[] = [];
@@ -131,8 +131,8 @@ function groupSummary(g: FeedGroup): { main: string; sub: string | null } {
 }
 
 function KindIcon({ kind, className }: { kind: FeedEvent["kind"]; className?: string }) {
-  if (kind === "fuel") return <Droplet className={cn("size-4 text-blue-600", className)} />;
-  if (kind === "trip") return <Truck className={cn("size-4 text-green-600", className)} />;
+  if (kind === "fuel") return <Droplet className={cn("size-4 text-info", className)} />;
+  if (kind === "trip") return <Truck className={cn("size-4 text-success", className)} />;
   return <Timer className={cn("size-4 text-violet-600", className)} />;
 }
 
@@ -265,20 +265,20 @@ export function TodayTab({ data }: { data: TodayData }) {
         {data.lineup.planned > 0 ? (
           <div className={cn(
             "flex flex-col gap-2 rounded-lg border p-4",
-            data.lineup.notOutRegs.length > 0 ? "border-amber-500/40 bg-amber-500/5" : "border-green-600/40 bg-green-600/5",
+            data.lineup.notOutRegs.length > 0 ? "border-warning/40 bg-warning/5" : "border-success/40 bg-success/5",
           )}>
             <button
               type="button"
               onClick={() => data.lineup.notOutRegs.length && setNotOutOpen((v) => !v)}
               className="flex items-center gap-2 text-left"
             >
-              <Truck className={cn("size-5 shrink-0", data.lineup.notOutRegs.length ? "text-amber-600" : "text-green-600")} />
+              <Truck className={cn("size-5 shrink-0", data.lineup.notOutRegs.length ? "text-warning" : "text-success")} />
               <span className="font-medium">
                 Выход на линию: выведено {fmtInt(data.lineup.planned)} · работает {fmtInt(data.lineup.worked)}
                 {data.lineup.notOutRegs.length > 0 ? (
                   <span className="text-destructive"> · не вышло {data.lineup.notOutRegs.length}</span>
                 ) : (
-                  <span className="text-green-600"> · все в работе</span>
+                  <span className="text-success"> · все в работе</span>
                 )}
               </span>
               {data.lineup.notOutRegs.length > 0 ? (
@@ -303,10 +303,10 @@ export function TodayTab({ data }: { data: TodayData }) {
       {data.attention.length ? (
         <section className="flex flex-col gap-2">
           <p className="text-sm font-medium">Требует внимания</p>
-          <div className="flex flex-col divide-y rounded-lg border border-amber-500/40">
+          <div className="flex flex-col divide-y rounded-lg border border-warning/40">
             {data.attention.map((a) => (
               <Link key={a.id} href="/fleet/dashboard/anomalies" className="flex items-center gap-2 p-3 text-sm hover:bg-accent">
-                <AlertTriangle className="size-4 shrink-0 text-amber-600" />
+                <AlertTriangle className="size-4 shrink-0 text-warning" />
                 <span className="font-medium">{ANOMALY_LABELS[a.type] ?? a.type}</span>
                 {a.reg ? <span className="text-muted-foreground">· {a.reg}</span> : null}
                 <span className="ml-auto text-xs tabular-nums text-muted-foreground">{fmtWhen(a.detected_at)}</span>
@@ -332,7 +332,7 @@ export function TodayTab({ data }: { data: TodayData }) {
                 </div>
                 <div className="text-right">
                   <p className="text-lg font-bold tabular-nums">{fmtLiters(t.calculated_liters)}</p>
-                  {t.stale ? <p className="text-xs text-amber-600">давно не мерили</p> : null}
+                  {t.stale ? <p className="text-xs text-warning">давно не мерили</p> : null}
                 </div>
               </div>
             ))}
@@ -343,7 +343,7 @@ export function TodayTab({ data }: { data: TodayData }) {
       <section className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-medium">Живая лента</p>
-          <span className={cn("flex items-center gap-1 text-xs", live ? "text-green-600" : "text-muted-foreground")}>
+          <span className={cn("flex items-center gap-1 text-xs", live ? "text-success" : "text-muted-foreground")}>
             <Radio className="size-3" /> {live ? "онлайн" : "…"}
           </span>
           <div className="ml-auto flex gap-1">

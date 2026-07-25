@@ -1,12 +1,16 @@
 import { cn } from "@/lib/utils";
 
-export type StatusTone = "amber" | "blue" | "red" | "green" | "muted";
+/**
+ * Тон статуса называется по смыслу, а не по цвету: цвет зависит от темы
+ * (в режиме «Солнце» он темнее), а смысл — нет.
+ */
+export type StatusTone = "success" | "warning" | "info" | "danger" | "muted";
 
 const TONES: Record<StatusTone, string> = {
-  amber: "border-amber-600/30 bg-amber-600/10 text-amber-700 dark:text-amber-400",
-  blue: "border-blue-600/30 bg-blue-600/10 text-blue-700 dark:text-blue-400",
-  red: "border-destructive/30 bg-destructive/10 text-destructive",
-  green: "border-green-600/30 bg-green-600/10 text-green-700 dark:text-green-400",
+  success: "border-success/30 bg-success/10 text-success",
+  warning: "border-warning/30 bg-warning/10 text-warning",
+  info: "border-info/30 bg-info/10 text-info",
+  danger: "border-destructive/30 bg-destructive/10 text-destructive",
   muted: "border-border bg-muted text-muted-foreground",
 };
 

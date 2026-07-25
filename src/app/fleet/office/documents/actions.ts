@@ -30,6 +30,7 @@ async function tryTemplate(
 import { aqtobeDate } from "@/lib/tz";
 import { fmtDateTime } from "@/lib/format";
 import { devError } from "@/lib/dev-log";
+import { dbError } from "@/lib/db-error";
 
 type Result = { ok: true; number: string } | { ok: false; error: string };
 type MultiResult = { ok: true; numbers: string[] } | { ok: false; error: string };
@@ -380,6 +381,6 @@ export async function getDocumentUrl(
 
   const admin = createAdminClient();
   const { data, error } = await admin.storage.from("documents").createSignedUrl(doc.file_url, 3600);
-  if (error) return { error: error.message };
+  if (error) return { error: dbError("fleet/office/documents/actions", error) };
   return { url: data.signedUrl };
 }

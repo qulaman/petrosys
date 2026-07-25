@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { zUuid } from "@/lib/validation";
 import { devError, IS_DEV } from "@/lib/dev-log";
+import { dbError } from "@/lib/db-error";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -52,7 +53,7 @@ export async function adminUpdateFuelIssue(
     .eq("id", p.data.id);
   if (error) {
     devError("adminUpdateFuelIssue", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/journals/admin-actions", error) };
   }
   refreshJournals();
   return { ok: true };
@@ -63,7 +64,7 @@ export async function adminDeleteFuelIssue(id: string): Promise<Result> {
   if (!gate.ok) return gate;
   const supabase = await createClient();
   const { error } = await supabase.from("fuel_issues").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/journals/admin-actions", error) };
   refreshJournals();
   return { ok: true };
 }
@@ -89,7 +90,7 @@ export async function adminUpdateTrip(
     .from("trip_records")
     .update({ driver_id: p.data.driver_id, route_id: p.data.route_id, vehicle_id: p.data.vehicle_id })
     .eq("id", p.data.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/journals/admin-actions", error) };
   refreshJournals();
   return { ok: true };
 }
@@ -99,7 +100,7 @@ export async function adminDeleteTrip(id: string): Promise<Result> {
   if (!gate.ok) return gate;
   const supabase = await createClient();
   const { error } = await supabase.from("trip_records").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/journals/admin-actions", error) };
   refreshJournals();
   return { ok: true };
 }
@@ -153,7 +154,7 @@ export async function adminUpdateShiftRecord(
     .eq("id", p.data.id);
   if (error) {
     devError("adminUpdateShiftRecord", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/journals/admin-actions", error) };
   }
   refreshJournals();
   revalidatePath("/fleet/shifts");
@@ -165,7 +166,7 @@ export async function adminDeleteShiftRecord(id: string): Promise<Result> {
   if (!gate.ok) return gate;
   const supabase = await createClient();
   const { error } = await supabase.from("shift_records").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/journals/admin-actions", error) };
   refreshJournals();
   revalidatePath("/fleet/shifts");
   return { ok: true };
@@ -181,7 +182,7 @@ export async function adminDeleteTankerEvent(
   const supabase = await createClient();
   const table = kind === "refill" ? "tanker_refills" : "tanker_measurements";
   const { error } = await supabase.from(table).delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/journals/admin-actions", error) };
   revalidatePath("/fleet/fuel/tanker");
   return { ok: true };
 }

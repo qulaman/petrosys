@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/auth/current-user";
+import { dbError } from "@/lib/db-error";
 
 const MIME: Record<string, string> = {
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -65,7 +66,7 @@ export async function saveGeneratedDocument(args: {
   const up = await admin.storage
     .from("documents")
     .upload(path, args.buffer, { contentType: MIME[args.ext], upsert: false });
-  if (up.error) return { ok: false, error: up.error.message };
+  if (up.error) return { ok: false, error: dbError("lib/documents/save", up.error) };
 
   const { error } = await supabase.from("generated_documents").insert({
     contract_id: args.contractId,
@@ -76,6 +77,6 @@ export async function saveGeneratedDocument(args: {
     source_refs: args.sourceRefs ?? null,
     file_url: path,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("lib/documents/save", error) };
   return { ok: true, number };
 }

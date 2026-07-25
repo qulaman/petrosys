@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
-    "@hookform/resolvers": "^5.4.0",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.6",
     "@tanstack/react-query": "^5.101.2",
@@ -28,7 +27,6 @@
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "react-hook-form": "^7.81.0",
     "recharts": "^3.9.2",
     "shadcn": "^4.13.0",
     "signature_pad": "^5.1.3",

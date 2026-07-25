@@ -21,7 +21,7 @@
 - **Next.js 16.2.10** (App Router, TypeScript strict) + **React 19**
 - **Supabase** (Postgres 17, Auth, Storage, Realtime) — вся БД и RLS; `@supabase/ssr` для cookie-сессий
 - **Tailwind CSS 4** + **shadcn/ui** (`components.json`, стиль `base-nova`, иконки lucide)
-- **TanStack Query**, react-hook-form + **zod v4**, sonner (тосты), recharts (дашборд)
+- **TanStack Query**, **zod v4**, sonner (тосты), recharts (дашборд). Формы — на `useState`, без form-библиотеки: экраны полевые и короткие, зависимость не окупалась
 - Документы: **docxtemplater + pizzip** (DOCX из шаблонов), **exceljs** (XLSX-акты)
 - Полевые фичи: html5-qrcode (скан QR техники), signature_pad (подписи), qrcode (генерация наклеек)
 - Деплой: **Vercel**, регион функций `bom1` закреплён в `vercel.json` (рядом с БД в ap-south-1) — не менять
@@ -91,7 +91,9 @@ supabase/                     # migrations/ (17 миграций), seed.sql, con
 - **Роли** (`src/lib/auth/roles.ts`): `admin`, `office`, `fueler`, `itr`, `checker`, `contractor`. У пользователя может быть несколько ролей (`profiles.roles text[]`); домашний экран выбирается по приоритету (офисные важнее полевых, портал последним) — `homePathForRoles()`. После логина каждая роль попадает сразу на СВОЙ рабочий экран, а не в меню.
 - **Авторизация двухслойная**: `proxy.ts` только освежает cookie сессии (`getSession()`, без сети); реальную проверку делают серверные страницы (`getCurrentProfile()` с `getUser()`, кешируется на запрос через `React.cache`) и RLS в БД. Не возвращать `getUser()` в middleware — это +~226 мс на каждый переход (см. комментарий в `src/lib/supabase/middleware.ts`).
 - **Три Supabase-клиента** — не путать: `lib/supabase/client.ts` (браузер), `lib/supabase/server.ts` (сервер, anon key + cookies, запросы идут через RLS от имени пользователя), `lib/supabase/admin.ts` (service role, в обход RLS — только там, где это осознанно нужно).
-- **Server actions** (`"use server"`, файлы `actions.ts` рядом со страницей): вход валидируется **zod-схемой в первую очередь**, результат — размеченное объединение `{ ok: true, ... } | { ok: false; error: string }`, текст ошибки пользователю на русском; детали в проде не утекают (см. паттерн `IS_DEV` в `src/lib/dev-log.ts` и пример `src/app/fleet/fuel/issue/actions.ts`).
+- **Server actions** (`"use server"`, файлы `actions.ts` рядом со страницей): вход валидируется **zod-схемой в первую очередь**, результат — размеченное объединение `{ ok: true, ... } | { ok: false; error: string }`, текст ошибки пользователю на русском. Ошибку БД/Storage наружу отдавать **только** через `dbError()` из `src/lib/db-error.ts` (исключения — через `unexpectedError()`): сырой `error.message` английский и раскрывает структуру БД. Возвращать `error.message` напрямую нельзя.
+- **Необратимые действия** (удаление, генерация пакета документов, снятие подписи) подтверждаются единообразно — хук `useConfirm()` из `src/components/ui/confirm-dialog.tsx`. `window.confirm` и тосты-с-действием в роли подтверждения не использовать.
+- **Общие примитивы UI**: таблицы — `src/components/ui/table.tsx` (числовые колонки: `align="right"` + `numeric`), пустые состояния — `EmptyState`, статусы — `StatusBadge`, заголовок экрана с описанием и действиями — через пропсы `title/description/actions` у `AppShell`/`PortalShell`, свой `<h1>` экраны не рисуют.
 - **Типы БД** `src/lib/supabase/database.types.ts` генерируются из удалённой БД (`supabase gen types`) и **не правятся вручную**. `src/lib/domain.ts` — ручные доменные типы/подписи, соответствующие check-ограничениям миграций.
 - **Полевая надёжность**: записи (рейс, смена, выдача) при ошибке сети складываются в outbox (localStorage) и переотправляются — полноценный offline-first по ТЗ не делаем, но потеря записи недопустима (`src/lib/outbox/`).
 - **i18n**: все строки UI — через словарь `src/lib/i18n/ru.ts` (доступ `ru.section.key`), не хардкодить русский текст в разметке там, где строка уже есть в словаре.

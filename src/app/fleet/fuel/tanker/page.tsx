@@ -3,6 +3,8 @@ import { getCurrentProfile } from "@/lib/auth/current-user";
 import { loadTankerData } from "@/lib/data/tanker";
 import { TankerClient } from "./tanker-client";
 
+export const metadata = { title: "Бензовоз" };
+
 export default async function TankerPage() {
   const [data, current] = await Promise.all([loadTankerData(), getCurrentProfile()]);
   const isAdmin = current?.profile?.roles.includes("admin") ?? false;

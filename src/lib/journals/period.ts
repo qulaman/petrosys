@@ -1,3 +1,5 @@
+import { TIME_ZONE } from "@/lib/format";
+
 /**
  * Разрешение периода из URL-параметров для журналов и (позже) дашборда.
  * Все границы — в часовом поясе объекта Asia/Aqtobe (UTC+5).
@@ -16,7 +18,7 @@ const TZ_OFFSET = "+05:00";
 
 function aqtobeToday(): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Aqtobe",
+    timeZone: TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

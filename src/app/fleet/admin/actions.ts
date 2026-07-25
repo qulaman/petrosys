@@ -4,6 +4,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { ENTITIES } from "@/lib/admin/registry";
+import { loadDirectorySheets } from "@/lib/data/directories";
+import { buildDirectoriesWorkbook } from "@/lib/documents/directories-xlsx";
+import { requireOfficeAdmin } from "@/lib/documents/save";
+import { aqtobeToday } from "@/lib/tz";
+import { devError } from "@/lib/dev-log";
+import { dbError } from "@/lib/db-error";
 
 type Result = { ok: true } | { ok: false; error: string; fkBlocked?: boolean };
 
@@ -43,9 +49,33 @@ export async function upsertRow(
     ? await supabase.from(cfg.slug).update(out).eq("id", id)
     : await supabase.from(cfg.slug).insert(out);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/actions", error) };
   revalidatePath(`/fleet/admin/${slug}`);
   return { ok: true };
+}
+
+/**
+ * Выгрузка ВСЕХ справочников одной книгой Excel (лист на справочник).
+ * Данные читаются под RLS от имени пользователя — доступ office/admin.
+ */
+export async function exportDirectoriesXlsx(): Promise<
+  { ok: true; base64: string; filename: string } | { ok: false; error: string }
+> {
+  const gate = await requireOfficeAdmin();
+  if (!gate.ok) return { ok: false, error: gate.error };
+  try {
+    const today = aqtobeToday();
+    const sheets = await loadDirectorySheets();
+    const buf = await buildDirectoriesWorkbook(sheets, today.split("-").reverse().join("."));
+    return {
+      ok: true,
+      base64: buf.toString("base64"),
+      filename: `справочники-${today}.xlsx`,
+    };
+  } catch (e) {
+    devError("exportDirectoriesXlsx", e);
+    return { ok: false, error: "Не удалось сформировать выгрузку" };
+  }
 }
 
 export async function deleteRow(slug: string, id: string): Promise<Result> {
@@ -61,7 +91,7 @@ export async function deleteRow(slug: string, id: string): Promise<Result> {
         error: "Удалить нельзя — по этой записи уже есть данные учёта (выдачи, рейсы, смены или договоры).",
       };
     }
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/admin/actions", error) };
   }
   revalidatePath(`/fleet/admin/${slug}`);
   return { ok: true };

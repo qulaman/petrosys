@@ -2,6 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 import { TemplatesClient, type TemplateRow } from "./templates-client";
 
+export const metadata = { title: "Шаблоны документов" };
+
 export default async function TemplatesPage() {
   const supabase = await createClient();
   const { data } = await supabase

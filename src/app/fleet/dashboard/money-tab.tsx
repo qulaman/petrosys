@@ -115,9 +115,9 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
       {/* Вне расчётов — работа, не попавшая в деньги */}
       {data.unbilledSummary.vehicles > 0 ? (
         <section className="flex flex-col gap-2">
-          <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
+          <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-4">
             <button type="button" onClick={() => setUnbilledOpen((v) => !v)} className="flex items-center gap-2 text-left">
-              <AlertTriangle className="size-5 shrink-0 text-amber-600" />
+              <AlertTriangle className="size-5 shrink-0 text-warning" />
               <span className="font-medium">
                 Вне расчётов: {fmtInt(data.unbilledSummary.trips)} рейсов · {fmtInt(data.unbilledSummary.hours)} ч
                 <span className="text-muted-foreground"> · {data.unbilledSummary.vehicles} машин</span>
@@ -148,7 +148,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
                             "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-medium",
                             u.reason === "no_contract"
                               ? "border-destructive/30 bg-destructive/10 text-destructive"
-                              : "border-amber-600/30 bg-amber-600/10 text-amber-700 dark:text-amber-400",
+                              : "border-warning/30 bg-warning/10 text-warning",
                           )}>
                             <span className="size-1.5 rounded-full bg-current" />
                             {u.reason === "no_contract" ? "нет договора" : "нет ставки в прайсе"}

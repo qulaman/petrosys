@@ -7,6 +7,8 @@ import { aqtobeDate } from "@/lib/tz";
 import { ANOMALY_LABELS, PENALTY_TYPES } from "@/lib/anomalies";
 import { AnomaliesClient, type AnomalyRow } from "./anomalies-client";
 
+export const metadata = { title: "Центр аномалий" };
+
 type Refs = Record<string, unknown>;
 
 const ddmm = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;

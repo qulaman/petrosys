@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Check, CopyPlus, FilePlus2, Lock, PenLine, Plus, Trash2 } from "lucide-react";
@@ -10,11 +10,15 @@ import { Label } from "@/components/ui/label";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
 import { useNavProgress } from "@/components/nav-progress";
+import { OutboxList } from "@/components/field/outbox-list";
+import { useOutbox, type SubmitResult } from "@/lib/outbox/use-outbox";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { uploadSignature } from "@/lib/storage/upload";
 import { driverGroups, driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { JournalLine, ShiftJournalData } from "@/lib/data/shifts";
 import { addLine, closeJournal, createJournal, removeLine, reopenJournal, updateJournal, updateLine } from "./actions";
+import { TIME_ZONE } from "@/lib/format";
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Этап 1 · Перечень техники",
@@ -32,6 +36,20 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
   const [signLine, setSignLine] = useState<JournalLine | null>(null);
   const [signItr, setSignItr] = useState(false);
   const [hoursDraft, setHoursDraft] = useState<Record<string, string>>({});
+  const { confirm, confirmDialog } = useConfirm();
+
+  // Часы коммитятся по onBlur — при обрыве связи правка раньше терялась,
+  // оставляя только тост. Теперь она ждёт связь в очереди.
+  const submitHours = useCallback(
+    (p: { line_id: string; hours: number }): Promise<SubmitResult> =>
+      updateLine(p).then((r) => (r.ok ? { ok: true } : { ok: false, error: r.error })),
+    [],
+  );
+  const {
+    entries: queuedHours,
+    add: queueHours,
+    remove: dropQueuedHours,
+  } = useOutbox<{ line_id: string; hours: number }>("shift_hours", submitHours, () => router.refresh());
 
   const vehById = useMemo(() => new Map(vehicles.map((v) => [v.id, v])), [vehicles]);
   const drvById = useMemo(() => new Map(drivers.map((d) => [d.id, d])), [drivers]);
@@ -142,8 +160,8 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
       <ShiftPicker date={data.date} shift={data.shift} onChange={setParams} />
 
       {/* Статус-плашка */}
-      <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm font-medium ${isClosed ? "border-green-600/40 bg-green-600/10" : ""}`}>
-        {isClosed ? <Lock className="size-4 text-green-600" /> : <PenLine className="size-4 text-primary" />}
+      <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm font-medium ${isClosed ? "border-success/40 bg-success/10" : ""}`}>
+        {isClosed ? <Lock className="size-4 text-success" /> : <PenLine className="size-4 text-primary" />}
         {STATUS_LABEL[journal.status]}
         {journal.status === "filling" ? (
           <span className="ml-auto text-xs text-muted-foreground">подписано {signedCount}/{lines.length}</span>
@@ -173,17 +191,29 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
           const v = vehById.get(l.vehicle_id);
           const signed = !!l.driver_signature_url;
           return (
-            <div key={l.id} className={`rounded-lg border p-3 ${signed ? "border-green-600 bg-green-600/10" : ""}`}>
+            <div key={l.id} className={`rounded-lg border p-3 ${signed ? "border-success bg-success/10" : ""}`}>
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold tracking-tight">{v?.reg_number ?? "—"}</span>
                 <span className="text-xs text-muted-foreground">{v ? vehicleTypeLabel(v.vehicle_type) : ""}</span>
                 {signed ? (
-                  <span className="ml-auto flex items-center gap-1 rounded-full bg-green-600 px-2 py-0.5 text-xs font-semibold text-white">
+                  <span className="ml-auto flex items-center gap-1 rounded-full bg-success px-2 py-0.5 text-xs font-semibold text-white">
                     <Check className="size-3.5" /> подписано
                   </span>
                 ) : null}
                 {!isClosed && !signed ? (
-                  <button className="ml-auto" onClick={() => act(() => removeLine(l.id), "Строка убрана")} aria-label="Убрать">
+                  <button
+                    className="ml-auto flex size-11 items-center justify-center -my-2 -mr-2"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: "Убрать машину из журнала?",
+                        description: "Строка с часами и подписью работника будет удалена из этой смены.",
+                        confirmLabel: "Убрать",
+                        destructive: true,
+                      });
+                      if (ok) act(() => removeLine(l.id), "Строка убрана");
+                    }}
+                    aria-label="Убрать машину из журнала"
+                  >
                     <Trash2 className="size-4 text-destructive" />
                   </button>
                 ) : null}
@@ -200,9 +230,15 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
                     if (raw == null || raw === String(l.hours)) return;
                     const h = parseFloat(raw);
                     if (!(h > 0 && h <= 24)) { toast.error("Часы: 0–24"); setHoursDraft((s) => ({ ...s, [l.id]: String(l.hours) })); return; }
-                    act(() => updateLine({ line_id: l.id, hours: h }), signed ? "Часы изменены — нужна новая подпись" : "Часы изменены");
+                    // id привязан к строке: повторная правка заменяет предыдущую в очереди.
+                    void queueHours(
+                      { line_id: l.id, hours: h },
+                      `${vehById.get(l.vehicle_id)?.reg_number ?? "машина"} · ${h} ч`,
+                      `hours-${l.id}`,
+                    );
+                    toast.success(signed ? "Часы изменены — нужна новая подпись" : "Часы изменены");
                   }}
-                  className={`h-11 text-center text-lg font-semibold ${signed ? "border-green-600/60 text-green-700 dark:text-green-400" : ""}`}
+                  className={`h-11 text-center text-lg font-semibold ${signed ? "border-success/60 text-success" : ""}`}
                 />
                 <select
                   value={l.driver_id}
@@ -287,17 +323,20 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
       {isClosed ? (
         <>
           <p className="text-center text-sm text-muted-foreground">
-            Журнал закрыт{journal.closed_at ? ` · ${new Date(journal.closed_at).toLocaleString("ru-RU", { timeZone: "Asia/Aqtobe" })}` : ""}. Изменения недоступны.
+            Журнал закрыт{journal.closed_at ? ` · ${new Date(journal.closed_at).toLocaleString("ru-RU", { timeZone: TIME_ZONE })}` : ""}. Изменения недоступны.
           </p>
           {isAdmin ? (
             <Button
               variant="outline"
               className="h-12"
               loading={pending}
-              onClick={() => {
-                if (!window.confirm("Переоткрыть журнал? Подпись мастера будет снята — после правок журнал нужно закрыть заново."))
-                  return;
-                act(() => reopenJournal(journal.id), "Журнал переоткрыт — подпись мастера снята");
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Переоткрыть журнал?",
+                  description: "Подпись мастера будет снята — после правок журнал нужно закрыть и подписать заново.",
+                  confirmLabel: "Переоткрыть",
+                });
+                if (ok) act(() => reopenJournal(journal.id), "Журнал переоткрыт — подпись мастера снята");
               }}
             >
               Переоткрыть журнал (администратор)
@@ -342,6 +381,8 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
           onCancel={() => setSignItr(false)}
         />
       ) : null}
+      <OutboxList entries={queuedHours} onRemove={dropQueuedHours} />
+      {confirmDialog}
     </div>
   );
 }

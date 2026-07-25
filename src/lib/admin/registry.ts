@@ -21,6 +21,11 @@ export interface ColumnDef {
   type?: FieldType;
   /** Подписи значений для колонок без поля в форме (например, source). */
   labels?: Record<string, string>;
+  /**
+   * Числовой формат ячейки: выравнивание вправо, разделители разрядов,
+   * моноширинные цифры. Без него число читается как текст и колонка «пляшет».
+   */
+  format?: "int" | "money" | "decimal";
 }
 
 export interface EntityConfig {
@@ -79,7 +84,9 @@ export const ENTITIES: Record<string, EntityConfig> = {
       { key: "brand", label: "Марка" },
       { key: "vehicle_type", label: "Вид" },
       { key: "accounting_type", label: "Учёт" },
-      { key: "contract_id", label: "Договор", type: "boolean" },
+      // Номер договора подставляется из FK-опций; раньше стояло type: "boolean"
+      // и колонка показывала «Да/—» вместо самого номера.
+      { key: "contract_id", label: "Договор" },
       {
         key: "source",
         label: "Источник",
@@ -156,7 +163,7 @@ export const ENTITIES: Record<string, EntityConfig> = {
     singular: "Бензовоз",
     columns: [
       { key: "name", label: "Название" },
-      { key: "capacity_liters", label: "Ёмкость, л" },
+      { key: "capacity_liters", label: "Ёмкость, л", format: "int" },
       { key: "is_active", label: "Активен", type: "boolean" },
     ],
     fields: [
@@ -172,9 +179,9 @@ export const ENTITIES: Record<string, EntityConfig> = {
     singular: "Маршрут",
     columns: [
       { key: "name", label: "Маршрут" },
-      { key: "distance_km", label: "Плечо, км" },
+      { key: "distance_km", label: "Плечо, км", format: "decimal" },
       { key: "material", label: "Материал" },
-      { key: "volume_m3", label: "Объём, м³" },
+      { key: "volume_m3", label: "Объём, м³", format: "decimal" },
       { key: "is_active", label: "Активен", type: "boolean" },
     ],
     fields: [
@@ -208,7 +215,7 @@ export const ENTITIES: Record<string, EntityConfig> = {
       { key: "downtime_date", label: "Дата" },
       { key: "vehicle_id", label: "Машина" },
       { key: "fault_side", label: "Вина" },
-      { key: "hours", label: "Часы" },
+      { key: "hours", label: "Часы", format: "decimal" },
     ],
     fields: [
       { key: "vehicle_id", label: "Машина", type: "select", optionsFrom: "vehicles", required: true },
@@ -235,7 +242,7 @@ export const ENTITIES: Record<string, EntityConfig> = {
     columns: [
       { key: "penalty_date", label: "Дата" },
       { key: "contract_id", label: "Договор" },
-      { key: "amount", label: "Сумма" },
+      { key: "amount", label: "Сумма", format: "money" },
       { key: "settled_in_period", label: "Удержан в" },
     ],
     fields: [
@@ -248,14 +255,5 @@ export const ENTITIES: Record<string, EntityConfig> = {
   },
 };
 
-export const ENTITY_ORDER = [
-  "vehicles",
-  "drivers",
-  "contractors",
-  "fuel_cards",
-  "tankers",
-  "routes",
-  "work_types",
-  "downtime_records",
-  "penalties",
-];
+// Порядок и группировка справочников на хабе — в src/app/fleet/admin/page.tsx.
+// Реестр отвечает только за то, какие справочники существуют и как они устроены.

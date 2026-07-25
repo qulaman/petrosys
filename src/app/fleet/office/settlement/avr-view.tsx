@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fmtMoney, fmtLiters } from "@/lib/format";
+import { downloadBase64, XLSX_MIME } from "@/lib/download";
 import type { ContractorAvr } from "@/lib/data/avr";
 import { exportContractorAvrXlsx } from "./actions";
 
@@ -26,16 +27,7 @@ export function AvrView({ avr: a }: { avr: ContractorAvr }) {
         to: sp.get("to") ?? undefined,
       });
       if (!res.ok) { setError(res.error); toast.error(res.error); return; }
-      const bin = atob(res.base64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = URL.createObjectURL(blob);
-      const el = document.createElement("a");
-      el.href = url;
-      el.download = res.filename;
-      el.click();
-      URL.revokeObjectURL(url);
+      downloadBase64(res.filename, res.base64, XLSX_MIME);
     });
   }
 
@@ -111,7 +103,7 @@ export function AvrView({ avr: a }: { avr: ContractorAvr }) {
       </div>
 
       {warnings.length ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+        <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
           <p className="font-medium">Не вошло в расчёт (нет тарифа или цены ГСМ):</p>
           {warnings.map((l) => (
             <p key={l.reg} className="text-muted-foreground">

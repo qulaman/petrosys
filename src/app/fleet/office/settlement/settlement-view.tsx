@@ -5,7 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { fmtMoney, fmtLiters } from "@/lib/format";
+import { downloadBase64, XLSX_MIME } from "@/lib/download";
 import type { Settlement } from "@/lib/data/settlement";
 import { exportSettlementXlsx } from "./actions";
 import { generateClosingPackage, generateReconciliationAct } from "../documents/actions";
@@ -24,6 +26,7 @@ export function SettlementView({ settlement: s }: { settlement: Settlement }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   function spParams() {
     return {
@@ -43,7 +46,15 @@ export function SettlementView({ settlement: s }: { settlement: Settlement }) {
     });
   }
 
-  function savePackage() {
+  async function savePackage() {
+    // Пакет закрытия — юридически значимые документы по периоду. Генерация
+    // в один клик без вопроса слишком легко случается «мимо».
+    const ok = await confirm({
+      title: "Сформировать пакет закрытия?",
+      description: `Будут созданы документы по договору за период на сумму ${fmtMoney(s.totals.net)}. Они попадут в раздел «Документы» и станут частью взаиморасчётов.`,
+      confirmLabel: "Сформировать",
+    });
+    if (!ok) return;
     setError(null);
     setSaved(null);
     start(async () => {
@@ -63,16 +74,7 @@ export function SettlementView({ settlement: s }: { settlement: Settlement }) {
         to: sp.get("to") ?? undefined,
       });
       if (!res.ok) { setError(res.error); toast.error(res.error); return; }
-      const bin = atob(res.base64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = res.filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBase64(res.filename, res.base64, XLSX_MIME);
     });
   }
 
@@ -98,7 +100,7 @@ export function SettlementView({ settlement: s }: { settlement: Settlement }) {
         </div>
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {saved ? <p className="text-sm text-green-600">Сохранено в Документы: {saved}</p> : null}
+      {saved ? <p className="text-sm text-success">Сохранено в Документы: {saved}</p> : null}
 
       {/* Начислено */}
       <section className="flex flex-col gap-2">
@@ -123,7 +125,7 @@ export function SettlementView({ settlement: s }: { settlement: Settlement }) {
           </table>
         </div>
         {s.noRate.length ? (
-          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
             <p className="font-medium">Нет тарифа (в итог не включено):</p>
             {s.noRate.map((l, i) => (
               <p key={i} className="text-muted-foreground">{l.reg} · {l.unit === "trip" ? "рейсов" : "часов"}: {l.qty}</p>
@@ -169,6 +171,7 @@ export function SettlementView({ settlement: s }: { settlement: Settlement }) {
         <div className="my-1 border-t" />
         <Row label="К оплате" value={fmtMoney(s.totals.net)} strong />
       </section>
+      {confirmDialog}
     </div>
   );
 }

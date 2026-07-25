@@ -2,13 +2,16 @@ import { AppShell } from "@/components/app-shell";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { loadShiftJournalData } from "@/lib/data/shifts";
 import { ShiftsClient } from "./shifts-client";
+import { TIME_ZONE } from "@/lib/format";
+
+export const metadata = { title: "Журнал смены" };
 
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 function todayAqtobe(): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Aqtobe",
+    timeZone: TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

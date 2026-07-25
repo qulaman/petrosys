@@ -18,8 +18,16 @@ export interface LineupInfo {
   status: "open" | "closed";
 }
 
-export interface PreviousLineup extends LineupInfo {
-  vehicleCount: number;
+/**
+ * Карточка-источник для наследования перечня: отдаём номера машин, а не
+ * счётчик — экран показывает, что именно перенесётся. Рейсы не наследуются
+ * никогда (они привязаны к своей карточке).
+ */
+export interface LineupSource {
+  id: string;
+  work_date: string;
+  shift_type: "day" | "night";
+  vehicleIds: string[];
 }
 
 export interface TripsScreenData {
@@ -33,8 +41,11 @@ export interface TripsScreenData {
   /** Перечень «на линии» текущей смены (этап 1) и его машины. */
   lineup: LineupInfo | null;
   lineupVehicleIds: string[];
-  /** Кандидат на наследование, когда перечня на смену ещё нет. */
-  previous: PreviousLineup | null;
+  /**
+   * Прошлые карточки (до 5) — источники наследования перечня. Считаются всегда,
+   * а не только при пустой смене: довыводить машины нужно и в открытой карточке.
+   */
+  sources: LineupSource[];
   /** Рейсы текущей смены по машинам: счётчик и время последнего (для плиток). */
   shiftStats: Record<string, { count: number; lastAt: string }>;
   /** Все рейсы карточки смены (для экрана проверки: удаление конкретных). */
@@ -94,16 +105,13 @@ export async function loadTripsData(
       .eq("org_id", orgId)
       .order("created_at", { ascending: false })
       .limit(300),
-    !lineup
-      ? supabase
-          .from("trip_lineups")
-          .select("id, work_date, shift_type, status")
-          .or(`work_date.lt.${date},and(work_date.eq.${date},shift_type.eq.day)`)
-          .order("work_date", { ascending: false })
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    supabase
+      .from("trip_lineups")
+      .select("id, work_date, shift_type")
+      .or(`work_date.lt.${date},and(work_date.eq.${date},shift_type.eq.day)`)
+      .order("work_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(5),
     supabase
       .from("trip_records")
       .select("id, vehicle_id, driver_id, created_at, tapped_at")
@@ -112,15 +120,24 @@ export async function loadTripsData(
       .order("created_at"),
   ]);
 
-  // Источник наследования (самонаследование той же смены исключаем).
-  let previous: PreviousLineup | null = null;
-  const prev = prevRes.data as LineupInfo | null;
-  if (prev && !(prev.work_date === date && prev.shift_type === shift)) {
-    const { count } = await supabase
+  // Источники наследования (самонаследование той же смены исключаем) вместе с
+  // перечнями их машин — одним запросом на все карточки сразу.
+  const prevList = ((prevRes.data ?? []) as Omit<LineupSource, "vehicleIds">[]).filter(
+    (l) => !(l.work_date === date && l.shift_type === shift),
+  );
+  let sources: LineupSource[] = [];
+  if (prevList.length) {
+    const { data: srcVehicles } = await supabase
       .from("trip_lineup_vehicles")
-      .select("id", { count: "exact", head: true })
-      .eq("lineup_id", prev.id);
-    previous = { ...prev, vehicleCount: count ?? 0 };
+      .select("lineup_id, vehicle_id")
+      .in("lineup_id", prevList.map((l) => l.id));
+    const byLineup = new Map<string, string[]>();
+    for (const r of srcVehicles ?? []) {
+      const list = byLineup.get(r.lineup_id) ?? [];
+      list.push(r.vehicle_id);
+      byLineup.set(r.lineup_id, list);
+    }
+    sources = prevList.map((l) => ({ ...l, vehicleIds: byLineup.get(l.id) ?? [] }));
   }
 
   const lastDriverByVehicle: Record<string, string> = {};
@@ -151,7 +168,7 @@ export async function loadTripsData(
     lastDriverByVehicle,
     lineup,
     lineupVehicleIds: (lineupVehRes.data ?? []).map((r: { vehicle_id: string }) => r.vehicle_id),
-    previous,
+    sources,
     shiftStats,
     shiftTrips: (shiftTripsRes.data ?? [])
       .map((t) => ({

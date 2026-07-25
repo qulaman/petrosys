@@ -1,33 +1,14 @@
 /**
- * Локальная очередь неотправленных полевых записей (retry-outbox).
- * Хранится в localStorage — записи в поле не теряются при обрыве сети.
- * По ТЗ полноценный offline-first не делаем, но потеря записи недопустима.
+ * Публичный API очереди неотправленных записей.
+ * Реализация хранилища — IndexedDB, см. `db.ts`. Синхронного доступа больше нет:
+ * localStorage вымылся вместе с ограничением в 5 МБ.
  */
-export type OutboxStatus = "pending" | "sending" | "error";
+export { allEntries, entriesOfKind, putEntry, deleteEntry } from "@/lib/outbox/db";
+export { KIND_LABELS, type OutboxEntry, type OutboxKind, type OutboxStatus } from "@/lib/outbox/types";
 
-export interface OutboxEntry {
-  id: string; // локальный uuid
-  kind: string; // тип записи: "trip", "shift", "fuel_issue"…
-  payload: unknown;
-  label: string; // подпись для ленты («353 FJ 04 · 14:22»)
-  createdAt: number;
-  attempts: number;
-  status: OutboxStatus;
-  error?: string;
-}
+/** Событие, по которому все подписчики (в т.ч. индикатор в шапке) перечитывают очередь. */
+export const OUTBOX_CHANGED = "qo-outbox-changed";
 
-const KEY = "qo-outbox";
-
-export function readOutbox(): OutboxEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(localStorage.getItem(KEY) || "[]") as OutboxEntry[];
-  } catch {
-    return [];
-  }
-}
-
-export function writeOutbox(list: OutboxEntry[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(KEY, JSON.stringify(list));
+export function notifyOutboxChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(OUTBOX_CHANGED));
 }

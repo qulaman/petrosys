@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { devError, IS_DEV } from "@/lib/dev-log";
 import { zUuid } from "@/lib/validation";
+import { dbError } from "@/lib/db-error";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -38,7 +39,7 @@ export async function createRefill(input: z.infer<typeof refillSchema>): Promise
   });
   if (error) {
     devError("createRefill", "ошибка вставки:", error);
-    return { ok: false, error: IS_DEV ? `БД: ${error.message}` : error.message };
+    return { ok: false, error: dbError("fleet/fuel/tanker/actions", error) };
   }
   revalidatePath("/fleet/fuel/tanker");
   return { ok: true };
@@ -79,7 +80,7 @@ export async function createMeasurement(
   });
   if (error) {
     devError("createMeasurement", "ошибка вставки:", error);
-    return { ok: false, error: IS_DEV ? `БД: ${error.message}` : error.message };
+    return { ok: false, error: dbError("fleet/fuel/tanker/actions", error) };
   }
   revalidatePath("/fleet/fuel/tanker");
   return { ok: true };

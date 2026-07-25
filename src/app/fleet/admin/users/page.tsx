@@ -4,6 +4,8 @@ import { getCurrentProfile } from "@/lib/auth/current-user";
 import { loadUsers } from "@/lib/data/users";
 import { UsersClient } from "./users-client";
 
+export const metadata = { title: "Пользователи и роли" };
+
 export default async function UsersPage() {
   const current = await getCurrentProfile();
   if (!current?.profile) redirect("/login");

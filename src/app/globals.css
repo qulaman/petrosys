@@ -37,6 +37,12 @@
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
+  /* Семантические цвета статусов: успех/предупреждение/информация.
+     Меняются вместе с темой, включая режим «Солнце» — в отличие от
+     захардкоженных green-600/amber-500, которые под солнцем блёкли. */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) * 0.6);
@@ -72,6 +78,9 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  --success: #16a34a;
+  --warning: #b45309;
+  --info: #2563eb;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -117,6 +126,9 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --info: #60a5fa;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: #f97316;
@@ -146,6 +158,9 @@
   --card-foreground: #000000;
   --secondary-foreground: #000000;
   --accent-foreground: #000000;
+  --success: #08611f;
+  --warning: #7a3b00;
+  --info: #0b3aa8;
 }
 .sun body {
   font-weight: 500;

@@ -13,6 +13,8 @@ import { FuelTab } from "./fuel-tab";
 import { WorkTab } from "./work-tab";
 import { MoneyTab } from "./money-tab";
 
+export const metadata = { title: "Дашборд" };
+
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 

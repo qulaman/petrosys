@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { fmtDateTime } from "@/lib/format";
 import { DocDownload } from "@/components/documents/doc-download";
 
+export const metadata = { title: "Мои документы" };
+
 const DOC_TYPES: Record<string, string> = {
   contract: "Договор",
   appendix1: "Приложение №1",

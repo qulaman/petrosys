@@ -4,6 +4,8 @@ import { aqtobeToday } from "@/lib/tz";
 import { loadRecentFacts } from "@/lib/data/forecast";
 import { FactList, VolumeForm } from "./volume-form";
 
+export const metadata = { title: "Объём — сводки" };
+
 /** Ввод дневных сводок геодезиста (м³): форма + журнал последних записей. */
 export default async function VolumePage() {
   const [rows, current] = await Promise.all([loadRecentFacts(), getCurrentProfile()]);

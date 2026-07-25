@@ -2,6 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "./settings-form";
 
+export const metadata = { title: "Настройки детекторов" };
+
 export default async function DetectorSettingsPage() {
   const supabase = await createClient();
   const { data } = await supabase

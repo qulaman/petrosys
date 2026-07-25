@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireOfficeAdmin } from "@/lib/documents/save";
 import { demoContractData, renderTemplate } from "@/lib/documents/render";
 import { devError } from "@/lib/dev-log";
+import { dbError } from "@/lib/db-error";
 
 type Result = { ok: true } | { ok: false; error: string };
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -32,7 +33,7 @@ export async function uploadTemplate(formData: FormData): Promise<Result> {
   const path = `${gate.orgId}/${crypto.randomUUID()}.docx`;
   const admin = createAdminClient();
   const up = await admin.storage.from("templates").upload(path, f.buf, { contentType: DOCX_MIME });
-  if (up.error) return { ok: false, error: up.error.message };
+  if (up.error) return { ok: false, error: dbError("fleet/admin/templates/actions", up.error) };
 
   const supabase = await createClient();
   const { error } = await supabase.from("document_templates").insert({
@@ -40,7 +41,7 @@ export async function uploadTemplate(formData: FormData): Promise<Result> {
   });
   if (error) {
     devError("uploadTemplate", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/admin/templates/actions", error) };
   }
   revalidatePath("/fleet/admin/templates");
   return { ok: true };
@@ -60,13 +61,13 @@ export async function replaceTemplate(id: string, formData: FormData): Promise<R
   const path = `${gate.orgId}/${crypto.randomUUID()}.docx`;
   const admin = createAdminClient();
   const up = await admin.storage.from("templates").upload(path, f.buf, { contentType: DOCX_MIME });
-  if (up.error) return { ok: false, error: up.error.message };
+  if (up.error) return { ok: false, error: dbError("fleet/admin/templates/actions", up.error) };
 
   const { error } = await supabase
     .from("document_templates")
     .update({ file_url: path, version: t.version + 1, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/templates/actions", error) };
   revalidatePath("/fleet/admin/templates");
   return { ok: true };
 }
@@ -76,7 +77,7 @@ export async function toggleTemplate(id: string, isActive: boolean): Promise<Res
   if (!gate.ok) return gate;
   const supabase = await createClient();
   const { error } = await supabase.from("document_templates").update({ is_active: isActive }).eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/templates/actions", error) };
   revalidatePath("/fleet/admin/templates");
   return { ok: true };
 }
@@ -89,7 +90,7 @@ export async function getTemplateUrl(id: string): Promise<{ url: string } | { er
   if (!t) return { error: "Шаблон не найден" };
   const admin = createAdminClient();
   const { data, error } = await admin.storage.from("templates").createSignedUrl(t.file_url, 600);
-  if (error) return { error: error.message };
+  if (error) return { error: dbError("fleet/admin/templates/actions", error) };
   return { url: data.signedUrl };
 }
 

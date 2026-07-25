@@ -8,6 +8,8 @@ import { SettlementView } from "./settlement-view";
 import { AvrView } from "./avr-view";
 import { SettlementPicker } from "./settlement-picker";
 
+export const metadata = { title: "Закрытие периода" };
+
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 

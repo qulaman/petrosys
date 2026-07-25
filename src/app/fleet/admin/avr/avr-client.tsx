@@ -220,7 +220,7 @@ function DriversForm({ vehicleId, day, night, onDone }: { vehicleId: string; day
 function UnassignedBlock({ data }: { data: RegistryData }) {
   const [openId, setOpenId] = useState<string | null>(null);
   return (
-    <section className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+    <section className="rounded-lg border border-warning/40 bg-warning/10 p-3">
       <p className="mb-2 text-sm font-medium">
         Без ИП и условий ({data.unassigned.length}) — не попадают в расчёт АВР:
       </p>

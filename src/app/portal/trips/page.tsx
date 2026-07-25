@@ -4,6 +4,8 @@ import { resolvePeriod } from "@/lib/journals/period";
 import { loadTripJournal } from "@/lib/data/journals";
 import { fmtDateTime } from "@/lib/format";
 
+export const metadata = { title: "Мои рейсы" };
+
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 

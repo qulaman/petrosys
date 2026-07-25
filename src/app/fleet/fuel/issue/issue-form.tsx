@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { Camera, Check, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,15 +10,36 @@ import { NumberKeypad } from "@/components/field/number-keypad";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { QrScanner } from "@/components/field/qr-scanner";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
+import { OutboxList } from "@/components/field/outbox-list";
 import { toast } from "sonner";
 import { uploadReceipt, uploadSignature } from "@/lib/storage/upload";
-import { devError, devLog } from "@/lib/dev-log";
+import { devLog } from "@/lib/dev-log";
+import { compressImage } from "@/lib/images/compress";
+import { useOutbox, type SubmitResult } from "@/lib/outbox/use-outbox";
 import { fmtLiters, fmtInt } from "@/lib/format";
 import { driverGroups, driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
 import type { FuelIssueData } from "@/lib/data/fuel-issue";
 import { createFuelIssue } from "./actions";
 
 const LAST_SOURCE_KEY = "qo-last-source";
+
+/**
+ * Что кладём в очередь: сырые данные выдачи вместе с подписью (SVG, ~2 КБ) и
+ * сжатым фото чека. Пути в Storage появляются только в момент отправки —
+ * иначе при обрыве связи запись осталась бы без файлов.
+ */
+interface IssuePayload {
+  orgId: string;
+  signatureSvg: string;
+  receipt: File | null;
+  source_type: "card" | "tanker";
+  fuel_card_id: string | null;
+  tanker_id: string | null;
+  vehicle_id: string;
+  driver_id: string;
+  liters: number;
+  odometer: number | null;
+}
 
 export function IssueForm({ data }: { data: FuelIssueData }) {
   const { orgId, cards, tankers, vehicles, drivers, balances, lastDriverByVehicle } =
@@ -49,6 +70,29 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
   const sourceId = sourceKey?.split(":")[1] ?? null;
   const tankerBalance =
     sourceType === "tanker" && sourceId ? balances[sourceId] ?? 0 : null;
+
+  // Отправка выдачи: загрузка подписи и чека + вставка записи. Всё внутри
+  // очереди, чтобы при обрыве связи повторилось целиком, а не наполовину.
+  const submitIssue = useCallback(async (p: IssuePayload): Promise<SubmitResult> => {
+    const signature_path = await uploadSignature(p.orgId, p.signatureSvg);
+    const receipt_path = p.receipt ? await uploadReceipt(p.orgId, p.receipt) : null;
+    return createFuelIssue({
+      source_type: p.source_type,
+      fuel_card_id: p.fuel_card_id,
+      tanker_id: p.tanker_id,
+      vehicle_id: p.vehicle_id,
+      driver_id: p.driver_id,
+      liters: p.liters,
+      odometer: p.odometer,
+      receipt_path,
+      signature_path,
+    });
+  }, []);
+  const {
+    entries: queued,
+    add: addToOutbox,
+    remove: removeQueued,
+  } = useOutbox<IssuePayload>("fuel_issue", submitIssue);
 
   const vehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
 
@@ -82,8 +126,11 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
     else setError("QR не распознан. Выберите машину из списка.");
   }
 
-  function onReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
+  async function onReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.files?.[0] ?? null;
+    // Сжимаем сразу при выборе: этот же файл может лечь в очередь и ждать связь,
+    // а снимок с камеры весит 2–4 МБ.
+    const f = raw ? await compressImage(raw) : null;
     setReceiptFile(f);
     setReceiptUrl(f ? URL.createObjectURL(f) : null);
   }
@@ -99,22 +146,22 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
   function submit() {
     if (!canSubmit || !sourceType || !vehicleId || !driverId || !sigDataUrl) return;
     setError(null);
+    const veh = vehicles.find((v) => v.id === vehicleId);
+    const label = `${veh?.reg_number ?? "машина"} · ${fmtLiters(litersNum)}`;
+
     startTransition(async () => {
-      try {
-        devLog("issue-form", "старт выдачи", {
-          sourceType, sourceId, vehicleId, driverId, litersNum, odometer,
-          hasReceipt: !!receiptFile, hasSignature: !!sigDataUrl,
-        });
+      devLog("issue-form", "выдача в очередь", {
+        sourceType, sourceId, vehicleId, driverId, litersNum, odometer,
+        hasReceipt: !!receiptFile, hasSignature: !!sigDataUrl,
+      });
 
-        const signature_path = await uploadSignature(orgId, sigDataUrl);
-        devLog("issue-form", "подпись загружена:", signature_path);
-
-        const receipt_path = receiptFile
-          ? await uploadReceipt(orgId, receiptFile)
-          : null;
-        devLog("issue-form", "чек загружен:", receipt_path);
-
-        const payload = {
+      // Запись кладётся в очередь и уходит сразу, если связь есть. При обрыве
+      // остаётся на телефоне вместе с подписью и чеком — раньше терялась.
+      await addToOutbox(
+        {
+          orgId,
+          signatureSvg: sigDataUrl,
+          receipt: receiptFile,
           source_type: sourceType as "card" | "tanker",
           fuel_card_id: sourceType === "card" ? sourceId : null,
           tanker_id: sourceType === "tanker" ? sourceId : null,
@@ -122,37 +169,20 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
           driver_id: driverId,
           liters: litersNum,
           odometer: odometer ? parseFloat(odometer) : null,
-          receipt_path,
-          signature_path,
-        };
-        devLog("issue-form", "payload → createFuelIssue:", payload);
+        },
+        label,
+      );
 
-        const res = await createFuelIssue(payload);
-        devLog("issue-form", "результат:", res);
-
-        if (!res.ok) {
-          devError("issue-form", "выдача отклонена:", res.error);
-          setError(res.error);
-          toast.error(res.error);
-          return;
-        }
-        const veh = vehicles.find((v) => v.id === vehicleId);
-        toast.success(`Выдано ${fmtLiters(litersNum)} · ${veh?.reg_number ?? ""}`);
-        setDone(`Выдано ${fmtLiters(litersNum)} · ${veh?.reg_number ?? ""}`);
-        // сброс для следующей записи (источник запоминаем)
-        setVehicleId(null);
-        setDriverId(null);
-        setLiters("");
-        setOdometer("");
-        setReceiptFile(null);
-        setReceiptUrl(null);
-        setSigDataUrl(null);
-      } catch (e) {
-        devError("issue-form", "исключение при сохранении:", e);
-        const msg = e instanceof Error ? e.message : "Ошибка сохранения";
-        setError(msg);
-        toast.error(msg);
-      }
+      toast.success(`Выдано ${fmtLiters(litersNum)} · ${veh?.reg_number ?? ""}`);
+      setDone(`Выдано ${fmtLiters(litersNum)} · ${veh?.reg_number ?? ""}`);
+      // сброс для следующей записи (источник запоминаем)
+      setVehicleId(null);
+      setDriverId(null);
+      setLiters("");
+      setOdometer("");
+      setReceiptFile(null);
+      setReceiptUrl(null);
+      setSigDataUrl(null);
     });
   }
 
@@ -201,16 +231,19 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
   );
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-6 pb-28">
+    // Запас снизу = высота закреплённой панели выдачи + нижнее меню.
+    <div className="mx-auto flex w-full max-w-md flex-col gap-6 pb-[calc(6rem_+_var(--app-bottom-nav,0px))]">
       {done ? (
-        <div className="flex items-center gap-2 rounded-lg border border-green-600/40 bg-green-600/10 p-3 text-sm">
-          <Check className="size-5 text-green-600" />
+        <div className="flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-3 text-sm">
+          <Check className="size-5 text-success" />
           <span>{done}</span>
           <button className="ml-auto underline" onClick={() => setDone(null)}>
             Ещё выдача
           </button>
         </div>
       ) : null}
+
+      <OutboxList entries={queued} onRemove={removeQueued} />
 
       {/* 1–2. Источник + техника */}
       {vehicle ? (
@@ -340,7 +373,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
         >
           {sigDataUrl ? (
             <>
-              <Check className="size-5 text-green-600" /> Подпись получена — изменить
+              <Check className="size-5 text-success" /> Подпись получена — изменить
             </>
           ) : (
             "Поставить подпись"
@@ -354,8 +387,12 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
         </p>
       ) : null}
 
-      {/* Sticky submit */}
-      <div className="fixed inset-x-0 bottom-0 border-t bg-background p-3">
+      {/* Закреплённая кнопка выдачи: поднята над нижним меню (--app-bottom-nav из AppShell),
+          иначе нижняя треть панели с главным действием экрана уходит под tab-bar. */}
+      <div
+        className="fixed inset-x-0 z-30 border-t bg-background p-3"
+        style={{ bottom: "var(--app-bottom-nav, 0px)" }}
+      >
         <div className="mx-auto max-w-md">
           <Button
             className="h-14 w-full text-lg"

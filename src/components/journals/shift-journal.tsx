@@ -111,7 +111,7 @@ export function ShiftJournal({
             в расчёте <b className="tabular-nums">{rows.length ? Math.round((inMoneyCount / rows.length) * 100) : 0}%</b>
           </span>
           {backdatedCount > 0 ? (
-            <span className="rounded-md border border-amber-500/40 px-2.5 py-1 text-amber-700 dark:text-amber-500">
+            <span className="rounded-md border border-warning/40 px-2.5 py-1 text-warning">
               задним числом <b className="tabular-nums">{backdatedCount}</b>
             </span>
           ) : null}
@@ -143,7 +143,7 @@ export function ShiftJournal({
                   {r.date}
                   {r.backdated ? (
                     <span
-                      className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-700 dark:text-amber-500"
+                      className="ml-1.5 rounded bg-warning/15 px-1.5 py-0.5 text-xs text-warning"
                       title={`Внесена ${r.createdAt.slice(0, 10)} — позже даты смены`}
                     >
                       задним числом
@@ -156,7 +156,7 @@ export function ShiftJournal({
                 <td className="px-3 py-2 text-right tabular-nums">{r.hours}</td>
                 <td className="px-3 py-2">{r.work_type}</td>
                 <td className="px-3 py-2">
-                  <StatusBadge tone={r.inMoney ? "green" : "amber"}>
+                  <StatusBadge tone={r.inMoney ? "success" : "warning"}>
                     {r.inMoney ? "в расчёте" : "черновик"}
                   </StatusBadge>
                 </td>

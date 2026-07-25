@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { getSignedUrlAction } from "@/app/fleet/journals/actions";
+import { unexpectedError } from "@/lib/db-error";
 
 /** Открывает приватный файл (чек/подпись) по signed URL. */
 export function AttachmentLink({
@@ -20,7 +22,11 @@ export function AttachmentLink({
     setLoading(true);
     try {
       const res = await getSignedUrlAction(bucket, path!);
+      // Молча ничего не делать нельзя: пользователь решит, что нажатие не сработало.
       if ("url" in res) window.open(res.url, "_blank", "noopener");
+      else toast.error(res.error ?? "Файл недоступен");
+    } catch (e) {
+      toast.error(unexpectedError("attachment-link", e, "Не удалось открыть файл"));
     } finally {
       setLoading(false);
     }

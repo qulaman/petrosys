@@ -3,6 +3,8 @@ import { PeriodSelector } from "@/components/period-selector";
 import { resolvePeriod } from "@/lib/journals/period";
 import { loadShiftJournal } from "@/lib/data/journals";
 
+export const metadata = { title: "Мои смены" };
+
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 

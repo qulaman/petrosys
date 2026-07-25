@@ -33,12 +33,12 @@ export async function upsertContract(
   const supabase = await createClient();
   if (id) {
     const { error } = await supabase.from("contracts").update(p.data).eq("id", id);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: dbError("fleet/admin/contracts/actions", error) };
     revalidatePath(`/fleet/admin/contracts/${id}`);
     return { ok: true, id };
   }
   const { data, error } = await supabase.from("contracts").insert(p.data).select("id").single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/contracts/actions", error) };
   revalidatePath("/fleet/admin/contracts");
   return { ok: true, id: data.id };
 }
@@ -66,7 +66,7 @@ export async function addPriceRow(
     return { ok: false, error: "Для услуг техники допустима только единица «час»" };
 
   const { error } = await supabase.from("price_list").insert({ contract_id: contractId, ...p.data });
-  if (error) { devError("addPriceRow", error); return { ok: false, error: error.message }; }
+  if (error) { devError("addPriceRow", error); return { ok: false, error: dbError("fleet/admin/contracts/actions", error) }; }
   revalidatePath(`/fleet/admin/contracts/${contractId}`);
   return { ok: true };
 }
@@ -74,7 +74,7 @@ export async function addPriceRow(
 export async function deletePriceRow(id: string, contractId: string): Promise<Result> {
   const supabase = await createClient();
   const { error } = await supabase.from("price_list").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/contracts/actions", error) };
   revalidatePath(`/fleet/admin/contracts/${contractId}`);
   return { ok: true };
 }
@@ -93,7 +93,7 @@ export async function addFuelPrice(
   if (!p.success) return fail(p.error);
   const supabase = await createClient();
   const { error } = await supabase.from("contract_fuel_prices").insert({ contract_id: contractId, ...p.data });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/contracts/actions", error) };
   revalidatePath(`/fleet/admin/contracts/${contractId}`);
   return { ok: true };
 }
@@ -101,7 +101,7 @@ export async function addFuelPrice(
 export async function deleteFuelPrice(id: string, contractId: string): Promise<Result> {
   const supabase = await createClient();
   const { error } = await supabase.from("contract_fuel_prices").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/contracts/actions", error) };
   revalidatePath(`/fleet/admin/contracts/${contractId}`);
   return { ok: true };
 }
@@ -115,6 +115,7 @@ import { appendix1Docx, appendix2Docx, contractDocx } from "@/lib/documents/buil
 import { contractTemplateData, renderTemplate, type ContractTemplateInput } from "@/lib/documents/render";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aqtobeDate } from "@/lib/tz";
+import { dbError } from "@/lib/db-error";
 
 /** Скачивает файл конкретного шаблона по id. */
 async function fetchTemplateBuffer(templateId: string): Promise<Buffer | null> {
@@ -172,7 +173,7 @@ export async function createContractWithTerms(
     })
     .select("id")
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/contracts/actions", error) };
 
   // 2) Прайс-лист и цена ГСМ (effective-dated от даты начала договора)
   const { error: pricesErr } = await supabase.from("price_list").insert(
@@ -181,12 +182,12 @@ export async function createContractWithTerms(
       price: r.price, valid_from: d.valid_from,
     })),
   );
-  if (pricesErr) return { ok: false, error: pricesErr.message };
+  if (pricesErr) return { ok: false, error: dbError("fleet/admin/contracts/actions", pricesErr) };
   if (d.fuel_price != null) {
     const { error: fuelErr } = await supabase.from("contract_fuel_prices").insert({
       contract_id: contract.id, price_per_liter: d.fuel_price, valid_from: d.valid_from,
     });
-    if (fuelErr) return { ok: false, error: fuelErr.message };
+    if (fuelErr) return { ok: false, error: dbError("fleet/admin/contracts/actions", fuelErr) };
   }
 
   // 3) docx-пакет: договор + Приложение №1 + Приложение №2 (ред.1)

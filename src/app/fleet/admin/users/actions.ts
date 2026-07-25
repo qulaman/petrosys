@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { ROLES } from "@/lib/auth/roles";
 import { zUuid } from "@/lib/validation";
+import { dbError } from "@/lib/db-error";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -54,7 +55,7 @@ export async function createUserAction(
       contractor_id: d.contractor_id,
     },
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/users/actions", error) };
 
   revalidatePath("/fleet/admin/users");
   return { ok: true };
@@ -89,7 +90,7 @@ export async function updateUserAction(
     })
     .eq("id", d.user_id)
     .eq("org_id", gate.orgId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/admin/users/actions", error) };
 
   revalidatePath("/fleet/admin/users");
   return { ok: true };

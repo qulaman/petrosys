@@ -12,15 +12,19 @@ import { QrScanner } from "@/components/field/qr-scanner";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
 import { useNavProgress } from "@/components/nav-progress";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import { useOutbox } from "@/lib/outbox/use-outbox";
 import { uploadSignature } from "@/lib/storage/upload";
 import { fmtTime } from "@/lib/format";
-import { driverPoolFor } from "@/lib/domain";
+import { driverPoolFor, type Vehicle } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { TripsScreenData } from "@/lib/data/trips";
-import { addLineupVehicle, closeTripJournal, createLineup, createTrip, deleteShiftTrips, deleteTrip, deleteTripJournal, deleteTrips, removeLineupVehicle, reopenTripJournal } from "./actions";
+import { addLineupVehicle, closeTripJournal, createLineup, createTrip, deleteShiftTrips, deleteTrip, deleteTripJournal, deleteTrips, inheritLineupVehicles, removeLineupVehicle, reopenTripJournal } from "./actions";
 
 const ROUTE_KEY = "qo-trip-route";
+
+const dmy = (d: string) => d.split("-").reverse().join(".");
+const shiftLabel = (s: "day" | "night") => (s === "day" ? "день" : "ночь");
 
 interface TripPayload {
   lineup_id: string;
@@ -33,7 +37,7 @@ interface TripPayload {
 }
 
 export function TripsClient({ data }: { data: TripsScreenData }) {
-  const { routes, vehicles, drivers, lastDriverByVehicle, lineup, lineupVehicleIds, previous, shiftStats, shiftTrips, canReopen } = data;
+  const { routes, vehicles, drivers, lastDriverByVehicle, lineup, lineupVehicleIds, sources, shiftStats, shiftTrips, canReopen } = data;
   const router = useRouter();
   const pathname = usePathname();
 
@@ -45,6 +49,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const [pendingSig, setPendingSig] = useState<{ vehicle_id: string; driver_id: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const { confirm, confirmDialog } = useConfirm();
   // Защита от дабл-тапа: плитки блокируются на время постановки рейса в очередь,
   // повторный рейс той же машины в коротком окне — только с подтверждением.
   const lastEnqueueRef = useRef<Map<string, number>>(new Map());
@@ -63,6 +68,9 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showAllTrips, setShowAllTrips] = useState(false);
+  // Наследование перечня: какая смена — источник и показывать ли её номера.
+  const [srcId, setSrcId] = useState<string | null>(null);
+  const [showSrcList, setShowSrcList] = useState(false);
   // Лента = рейсы ТЕКУЩЕЙ смены, свежие сверху (старые дни — в журнале рейсов).
   const shiftFeed = useMemo(() => [...data.shiftTrips].reverse(), [data.shiftTrips]);
 
@@ -117,6 +125,38 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   const drvById = useMemo(() => new Map(drivers.map((d) => [d.id, d])), [drivers]);
 
   const onLineSet = useMemo(() => new Set(lineupVehicleIds), [lineupVehicleIds]);
+
+  // Наследование перечня: смена-источник, её машины (только те, что ещё в парке
+  // и на учёте рейсов) и та часть, которой ещё нет на линии.
+  const source = sources.find((s) => s.id === srcId) ?? sources[0] ?? null;
+  const sourceVehicles = useMemo(
+    () =>
+      (source?.vehicleIds ?? [])
+        .map((id) => vehById.get(id))
+        .filter((v): v is Vehicle => v != null),
+    [source, vehById],
+  );
+  const sourceNew = useMemo(
+    () => sourceVehicles.filter((v) => !onLineSet.has(v.id)),
+    [sourceVehicles, onLineSet],
+  );
+  const sourceOptions = useMemo(
+    () =>
+      sources.map((s) => ({
+        id: s.id,
+        label: `${dmy(s.work_date)} · ${shiftLabel(s.shift_type)} · машин: ${s.vehicleIds.filter((id) => vehById.has(id)).length}`,
+      })),
+    [sources, vehById],
+  );
+
+  function inheritInto(lineupId: string, fromId: string) {
+    start(async () => {
+      const res = await inheritLineupVehicles({ lineup_id: lineupId, from_lineup_id: fromId });
+      if (!res.ok) { toast.error(res.error); return; }
+      toast.success(res.added ? `Выведено машин: ${res.added}` : "Новых машин в той смене нет");
+      router.refresh();
+    });
+  }
   // Сортировка «давно без рейса — сверху» для массового ввода (по умолчанию алфавит).
   const [sortIdleFirst, setSortIdleFirst] = useState(false);
   const onLineVehicles = useMemo(() => {
@@ -283,30 +323,50 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
           Самосвалы на эту смену ещё не выведены на линию. Сформируйте перечень:
         </p>
 
-        {previous ? (
-          <Button
-            className="h-20 justify-start gap-3 text-left"
-            loading={pending}
-            onClick={() =>
-              act(
-                () =>
-                  createLineup({
-                    work_date: data.date,
-                    shift_type: data.shift,
-                    inherit_from: previous.id,
-                  }),
-                "Перечень унаследован",
-              )
-            }
-          >
-            <CopyPlus className="size-6 shrink-0" />
-            <span>
-              <span className="block font-semibold">Наследовать предыдущую смену</span>
-              <span className="block text-xs opacity-80">
-                {previous.work_date} · {previous.shift_type === "day" ? "день" : "ночь"} · машин: {previous.vehicleCount}
+        {source ? (
+          <div className="flex flex-col gap-2">
+            <Button
+              className="h-20 justify-start gap-3 text-left"
+              loading={pending}
+              onClick={() =>
+                act(
+                  () =>
+                    createLineup({
+                      work_date: data.date,
+                      shift_type: data.shift,
+                      inherit_from: source.id,
+                    }),
+                  "Перечень унаследован",
+                )
+              }
+            >
+              <CopyPlus className="size-6 shrink-0" />
+              <span>
+                <span className="block font-semibold">Наследовать смену</span>
+                <span className="block text-xs opacity-80">
+                  {dmy(source.work_date)} · {shiftLabel(source.shift_type)} · машин: {sourceVehicles.length}
+                </span>
               </span>
-            </span>
-          </Button>
+            </Button>
+            <SourcePicker options={sourceOptions} value={source.id} onChange={setSrcId} />
+            <button
+              type="button"
+              className="self-start text-xs text-primary underline"
+              onClick={() => setShowSrcList((v) => !v)}
+            >
+              {showSrcList ? "скрыть номера" : "показать номера машин"}
+            </button>
+            {showSrcList ? (
+              <p className="text-xs text-muted-foreground">
+                {sourceVehicles.length
+                  ? sourceVehicles.map((v) => v.reg_number).join(", ")
+                  : "В той смене нет машин, которые сейчас в парке."}
+              </p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              Переносятся только номера машин — рейсы начинаются с нуля.
+            </p>
+          </div>
         ) : null}
 
         <Button
@@ -342,8 +402,8 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-4">
         <ShiftPicker date={data.date} shift={data.shift} onChange={setParams} />
-        <div className="flex items-center gap-2 rounded-lg border border-green-600 bg-green-600/10 p-3">
-          <Check className="size-5 text-green-600" />
+        <div className="flex items-center gap-2 rounded-lg border border-success bg-success/10 p-3">
+          <Check className="size-5 text-success" />
           <div className="flex-1">
             <p className="font-semibold">Смена закрыта мастером</p>
             <p className="text-xs text-muted-foreground">
@@ -394,8 +454,8 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
       </div>
 
       {hasUnsent ? (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-sm">
-          <AlertTriangle className="size-4 text-amber-600" />
+        <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning/10 p-2 text-sm">
+          <AlertTriangle className="size-4 text-warning" />
           Не отправлено: {pendingCount}
           <Button variant="ghost" size="sm" className="ml-auto" onClick={() => void flush()}>
             <RotateCw className="size-4" /> Повторить
@@ -404,7 +464,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
       ) : null}
 
       {/* Мини-дашборд карточки смены: цифры, сигналы и ВСЕ действия карточки — наверху. */}
-      <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+      <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs font-medium uppercase text-muted-foreground">Карточка смены · черновик</p>
           <div className="flex items-center gap-1.5">
@@ -456,8 +516,8 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         </div>
 
         {staleVehicles.length ? (
-          <div className="flex items-start gap-1.5 rounded-md border border-amber-500/50 bg-amber-500/10 p-2 text-sm">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <div className="flex items-start gap-1.5 rounded-md border border-warning/50 bg-warning/10 p-2 text-sm">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
             <p>
               Давно без рейса:{" "}
               {staleVehicles.slice(0, 4).map((x, i) => (
@@ -555,7 +615,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
               <span className={`rounded-full px-2 py-0.5 text-sm font-bold tabular-nums ${s ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
                 {s?.count ?? 0}
               </span>
-              <span className={`mt-0.5 text-xs tabular-nums ${stale ? "font-semibold text-amber-600" : "text-muted-foreground"}`}>
+              <span className={`mt-0.5 text-xs tabular-nums ${stale ? "font-semibold text-warning" : "text-muted-foreground"}`}>
                 {s ? (stale ? `${idle} мин назад` : fmtTime(s.lastAt)) : "—"}
               </span>
             </span>
@@ -570,6 +630,27 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         </Button>
         {manageOpen ? (
           <div className="flex flex-col gap-3 rounded-lg border p-3">
+            {source ? (
+              <div className="flex flex-col gap-1.5">
+                <Label>Перечень прошлой смены</Label>
+                <Button
+                  variant="outline"
+                  className="h-12 justify-start gap-2"
+                  disabled={pending || sourceNew.length === 0}
+                  onClick={() => inheritInto(lineup.id, source.id)}
+                >
+                  <CopyPlus className="size-5 shrink-0" />
+                  {sourceNew.length
+                    ? `Вывести машины смены ${dmy(source.work_date)} (${sourceNew.length})`
+                    : `Смена ${dmy(source.work_date)}: все машины уже на линии`}
+                </Button>
+                <SourcePicker options={sourceOptions} value={source.id} onChange={setSrcId} />
+                <p className="text-xs text-muted-foreground">
+                  Переносятся только номера машин — рейсы не копируются.
+                </p>
+              </div>
+            ) : null}
+
             <div className="flex flex-col gap-1.5">
               <Label>Не на линии — нажмите, чтобы вывести</Label>
               <VehiclePicker
@@ -621,13 +702,20 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
               variant="destructive"
               size="sm"
               disabled={pending || selected.size === 0}
-              onClick={() =>
+              onClick={async () => {
+                const ok = await confirm({
+                  title: `Удалить рейсы: ${selected.size}?`,
+                  description: "Записи исчезнут из журнала и расчёта. Действие необратимо.",
+                  confirmLabel: "Удалить",
+                  destructive: true,
+                });
+                if (!ok) return;
                 act(async () => {
                   const res = await deleteTrips([...selected]);
                   if (res.ok) { setSelected(new Set()); if (res.error) toast.info(res.error); }
                   return res;
-                }, "Выбранные рейсы удалены")
-              }
+                }, "Выбранные рейсы удалены");
+              }}
             >
               <Trash2 className="size-4" /> Удалить выбранные ({selected.size})
             </Button>
@@ -635,22 +723,22 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
               variant="outline"
               size="sm"
               disabled={pending || shiftTrips.length === 0}
-              onClick={() =>
-                toast(`Удалить все рейсы смены (${shiftTrips.length})?`, {
-                  description: "Карточка останется, машины на линии сохранятся.",
-                  action: {
-                    label: "Удалить все",
-                    onClick: () =>
-                      act(async () => {
-                        const res = await deleteShiftTrips(lineup.id);
-                        if (res.ok) { setSelected(new Set()); setSelectMode(false); if (res.error) toast.info(res.error); }
-                        return res;
-                      }, "Рейсы смены удалены"),
-                  },
-                  cancel: { label: "Отмена", onClick: () => {} },
-                  duration: 8000,
-                })
-              }
+              onClick={async () => {
+                // Был тост с действием — четвёртый способ подтверждения в приложении.
+                // Необратимое подтверждается везде одинаково, диалогом.
+                const ok = await confirm({
+                  title: `Удалить все рейсы смены: ${shiftTrips.length}?`,
+                  description: "Карточка смены останется, машины на линии сохранятся. Сами рейсы восстановить будет нельзя.",
+                  confirmLabel: "Удалить все",
+                  destructive: true,
+                });
+                if (!ok) return;
+                act(async () => {
+                  const res = await deleteShiftTrips(lineup.id);
+                  if (res.ok) { setSelected(new Set()); setSelectMode(false); if (res.error) toast.info(res.error); }
+                  return res;
+                }, "Рейсы смены удалены");
+              }}
             >
               <Trash2 className="size-4" /> Удалить все рейсы смены ({shiftTrips.length})
             </Button>
@@ -659,13 +747,19 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         <div className="flex flex-col divide-y rounded-lg border">
           {entries.map((e) => (
             <div key={e.id} className="flex items-center gap-2 p-3 text-sm">
-              <RotateCw className={`size-4 ${e.status === "error" ? "text-destructive" : "text-amber-600"}`} />
+              <RotateCw className={`size-4 ${e.status === "error" ? "text-destructive" : "text-warning"}`} />
               <span className="flex-1">{e.label}</span>
               <span className="text-xs text-muted-foreground">
-                {e.status === "error" ? "не отправлено" : "отправляется…"}
+                {/* Причина ошибки хранилась в очереди, но не показывалась —
+                    человек не понимал, ждать связь или запись отклонена. */}
+                {e.status === "error" ? (e.error ?? "не отправлено") : "отправляется…"}
               </span>
               {e.status === "error" ? (
-                <button onClick={() => remove(e.id)} aria-label="Убрать">
+                <button
+                  onClick={() => remove(e.id)}
+                  aria-label="Убрать неотправленную запись"
+                  className="-my-2 flex size-11 shrink-0 items-center justify-center"
+                >
                   <X className="size-4 text-muted-foreground" />
                 </button>
               ) : null}
@@ -692,7 +786,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
                 {selectMode ? (
                   <input type="checkbox" readOnly checked={isSelected} className="size-5 accent-destructive" />
                 ) : (
-                  <Check className="size-4 text-green-600" />
+                  <Check className="size-4 text-success" />
                 )}
                 <span className="flex-1">
                   {vehById.get(t.vehicle_id)?.reg_number ?? "—"}
@@ -769,6 +863,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
           onCancel={() => setSignClose(false)}
         />
       ) : null}
+      {confirmDialog}
     </div>
   );
 }
@@ -858,6 +953,33 @@ function ShiftSummary({
         <span className="tabular-nums">{total}</span>
       </div>
     </div>
+  );
+}
+
+/** Выбор смены-источника для наследования перечня (нужен, когда карточек больше одной). */
+function SourcePicker({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  if (options.length < 2) return null;
+  return (
+    <select
+      aria-label="Смена-источник перечня"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-10 rounded-md border bg-background px-2 text-sm"
+    >
+      {options.map((o) => (
+        <option key={o.id} value={o.id}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
 

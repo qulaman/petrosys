@@ -5,6 +5,8 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { zUuid } from "@/lib/validation";
 import { devError } from "@/lib/dev-log";
+import { dbError } from "@/lib/db-error";
+import { TIME_ZONE } from "@/lib/format";
 
 type Result = { ok: true; count?: number } | { ok: false; error: string };
 
@@ -17,7 +19,7 @@ const zBulk = z.object({
 
 function aqtobeToday(): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Aqtobe",
+    timeZone: TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -29,7 +31,7 @@ export async function recomputeAction(): Promise<Result> {
   const { data, error } = await supabase.rpc("recompute_anomalies");
   if (error) {
     devError("recomputeAnomalies", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/dashboard/anomalies/actions", error) };
   }
   revalidatePath("/fleet/dashboard/anomalies");
   return { ok: true, count: data ?? 0 };
@@ -50,7 +52,7 @@ export async function updateAnomalyStatus(
     .eq("id", id);
   if (error) {
     devError("updateAnomalyStatus", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/dashboard/anomalies/actions", error) };
   }
   revalidatePath("/fleet/dashboard/anomalies");
   return { ok: true };
@@ -78,7 +80,7 @@ export async function bulkUpdateStatus(
       .in("id", chunk);
     if (error) {
       devError("bulkUpdateStatus", error);
-      return { ok: false, error: error.message };
+      return { ok: false, error: dbError("fleet/dashboard/anomalies/actions", error) };
     }
   }
   revalidatePath("/fleet/dashboard/anomalies");
@@ -99,7 +101,7 @@ export async function markReviewed(id: string): Promise<Result> {
     .eq("status", "new");
   if (error) {
     devError("markReviewed", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/dashboard/anomalies/actions", error) };
   }
   return { ok: true };
 }
@@ -135,7 +137,7 @@ export async function createPenaltyFromAnomaly(
   });
   if (error) {
     devError("createPenaltyFromAnomaly", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/dashboard/anomalies/actions", error) };
   }
 
   // Помечаем аномалию подтверждённой (если ещё нет).

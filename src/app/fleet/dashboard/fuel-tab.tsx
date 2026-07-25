@@ -215,7 +215,7 @@ export function FuelTab({ data }: { data: FuelTabData }) {
                   <span className="flex w-24 shrink-0 items-center gap-1 text-sm font-medium">
                     {t.reg}
                     {t.attention ? (
-                      <AlertTriangle className="size-3.5 shrink-0 text-amber-600" aria-label="Есть открытая аномалия" />
+                      <AlertTriangle className="size-3.5 shrink-0 text-warning" aria-label="Есть открытая аномалия" />
                     ) : null}
                   </span>
                   <div className="h-3 flex-1 rounded bg-muted">

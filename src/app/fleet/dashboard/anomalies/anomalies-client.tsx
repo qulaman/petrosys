@@ -57,9 +57,9 @@ const DATE_FILTERS: { key: string; label: string; days: number | null }[] = [
 ];
 
 const statusTone: Record<string, StatusTone> = {
-  new: "amber",
-  reviewed: "blue",
-  confirmed: "red",
+  new: "warning",
+  reviewed: "info",
+  confirmed: "danger",
   dismissed: "muted",
 };
 

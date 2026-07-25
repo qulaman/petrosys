@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Droplet, ClipboardList, Truck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 
+export const metadata = { title: "Журналы" };
+
 const CARDS = [
   { href: "/fleet/journals/fuel", label: "Журнал выдачи ГСМ", icon: Droplet },
   { href: "/fleet/journals/trips", label: "Журнал рейсов", icon: Truck },

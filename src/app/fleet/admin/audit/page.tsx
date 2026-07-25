@@ -4,6 +4,8 @@ import { resolvePeriod } from "@/lib/journals/period";
 import { loadAuditPage } from "@/lib/data/audit";
 import { AuditClient } from "./audit-client";
 
+export const metadata = { title: "Журнал изменений" };
+
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 

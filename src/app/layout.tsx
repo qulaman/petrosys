@@ -17,7 +17,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: `${ru.app.name} — ${ru.app.tagline}`,
+  // template — чтобы вкладка называлась «Справочники — Arlan Ops», а не одинаково у всех.
+  title: {
+    default: `${ru.app.name} — ${ru.app.tagline}`,
+    template: `%s — ${ru.app.name}`,
+  },
   description: "Система управления и учёта производства West Arlan Group",
   appleWebApp: { capable: true, title: "Arlan Ops", statusBarStyle: "default" },
   icons: { apple: "/icon-192.png" },
@@ -25,6 +29,9 @@ export const metadata: Metadata = {
 
 export const viewport = {
   themeColor: "#c2410c",
+  // Без cover отступы env(safe-area-inset-*) на iOS всегда 0 — нижнее меню
+  // и закреплённые панели наезжают на системную полосу жестов.
+  viewportFit: "cover" as const,
 };
 
 export default function RootLayout({

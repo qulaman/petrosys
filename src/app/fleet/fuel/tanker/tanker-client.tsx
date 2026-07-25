@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDownRight, ArrowUpRight, Fuel, Ruler, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -12,9 +12,33 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { uploadReceipt } from "@/lib/storage/upload";
 import { fmtLiters, fmtDateTime } from "@/lib/format";
+import { OutboxList } from "@/components/field/outbox-list";
+import { useOutbox, type SubmitResult } from "@/lib/outbox/use-outbox";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 import type { TankerScreenData } from "@/lib/data/tanker";
 import { createMeasurement, createRefill } from "./actions";
 import { adminDeleteTankerEvent } from "@/app/fleet/journals/admin-actions";
+
+/** Операция бензовоза в очереди: приход (с фото чека) либо замер остатка. */
+type TankerOp =
+  | {
+      op: "refill";
+      orgId: string;
+      receipt: File | null;
+      tanker_id: string;
+      liters: number;
+      price_per_liter: number | null;
+      source: string | null;
+      fuel_card_id: string | null;
+    }
+  | {
+      op: "measure";
+      orgId: string;
+      receipt: null;
+      tanker_id: string;
+      measured_liters: number;
+      note: string | null;
+    };
 
 export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData; isAdmin?: boolean }) {
   const { orgId, cards, tankers, eventsByTanker } = data;
@@ -24,6 +48,33 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
+
+  // Обе операции бензовоза идут через одну очередь: приход тянет фото чека,
+  // замер — нет, но терять нельзя ни то, ни другое.
+  const submitOp = useCallback(async (p: TankerOp): Promise<SubmitResult> => {
+    if (p.op === "refill") {
+      const receipt_path = p.receipt ? await uploadReceipt(p.orgId, p.receipt) : null;
+      return createRefill({
+        tanker_id: p.tanker_id,
+        liters: p.liters,
+        price_per_liter: p.price_per_liter,
+        source: p.source,
+        fuel_card_id: p.fuel_card_id,
+        receipt_path,
+      });
+    }
+    return createMeasurement({
+      tanker_id: p.tanker_id,
+      measured_liters: p.measured_liters,
+      note: p.note,
+    });
+  }, []);
+  const {
+    entries: queued,
+    add: queueOp,
+    remove: dropQueued,
+  } = useOutbox<TankerOp>("tanker", submitOp, () => router.refresh());
 
   // приход
   const [rLiters, setRLiters] = useState("");
@@ -54,23 +105,23 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
     if (!tankerId || liters <= 0) { setError("Введите литры прихода"); return; }
     setError(null);
     start(async () => {
-      try {
-        const receipt_path = rFile ? await uploadReceipt(orgId, rFile) : null;
-        const res = await createRefill({
+      // Через очередь: приход с фото чека не должен пропадать при обрыве связи.
+      await queueOp(
+        {
+          op: "refill",
+          orgId,
+          receipt: rFile,
           tanker_id: tankerId,
           liters,
           price_per_liter: rPrice ? parseFloat(rPrice) : null,
           source: rSource || null,
           fuel_card_id: rCard || null,
-          receipt_path,
-        });
-        if (!res.ok) { setError(res.error); toast.error(res.error); return; }
-        toast.success(`Приход ${fmtLiters(liters)} принят`);
-        setDone(`Приход ${fmtLiters(liters)} принят`);
-        reset();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Ошибка");
-      }
+        },
+        `Приход ${fmtLiters(liters)}`,
+      );
+      toast.success(`Приход ${fmtLiters(liters)} принят`);
+      setDone(`Приход ${fmtLiters(liters)} принят`);
+      reset();
     });
   }
 
@@ -79,12 +130,12 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
     if (!tankerId || mLiters === "") { setError("Введите замеренный остаток"); return; }
     setError(null);
     start(async () => {
-      const res = await createMeasurement({
-        tanker_id: tankerId,
-        measured_liters: measured,
-        note: mNote || null,
-      });
-      if (!res.ok) { setError(res.error); toast.error(res.error); return; }
+      // Раньше обрыв связи ронял server action исключением, оно уходило
+      // в unhandled rejection, и человек не узнавал, что замер не сохранён.
+      await queueOp(
+        { op: "measure", orgId, receipt: null, tanker_id: tankerId, measured_liters: measured, note: mNote || null },
+        `Замер ${fmtLiters(measured)}`,
+      );
       toast.success(`Замер сохранён: ${fmtLiters(measured)}`);
       setDone(`Замер сохранён: ${fmtLiters(measured)}`);
       reset();
@@ -125,7 +176,7 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
       </Card>
 
       {done ? (
-        <div className="rounded-lg border border-green-600/40 bg-green-600/10 p-3 text-sm">
+        <div className="rounded-lg border border-success/40 bg-success/10 p-3 text-sm">
           {done}{" "}
           <button className="underline" onClick={() => setDone(null)}>ok</button>
         </div>
@@ -232,11 +283,11 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
             events.map((e) => (
               <div key={`${e.kind}-${e.id}`} className="flex items-center gap-3 p-3">
                 {e.kind === "refill" ? (
-                  <ArrowUpRight className="size-5 text-green-600" />
+                  <ArrowUpRight className="size-5 text-success" />
                 ) : e.kind === "issue" ? (
-                  <ArrowDownRight className="size-5 text-orange-600" />
+                  <ArrowDownRight className="size-5 text-warning" />
                 ) : (
-                  <Ruler className="size-5 text-blue-600" />
+                  <Ruler className="size-5 text-info" />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">
@@ -250,8 +301,14 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
                 {isAdmin && e.kind !== "issue" ? (
                   <button
                     aria-label="Удалить (админ)"
-                    onClick={() => {
-                      if (!window.confirm("Удалить эту операцию? Баланс бензовоза пересчитается.")) return;
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: "Удалить операцию?",
+                        description: "Баланс бензовоза будет пересчитан. Действие необратимо.",
+                        confirmLabel: "Удалить",
+                        destructive: true,
+                      });
+                      if (!ok) return;
                       start(async () => {
                         const res = await adminDeleteTankerEvent(e.kind as "refill" | "measurement", e.id);
                         if (!res.ok) { toast.error(res.error); return; }
@@ -268,6 +325,8 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
           )}
         </div>
       </section>
+      <OutboxList entries={queued} onRemove={dropQueued} />
+      {confirmDialog}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { devError, devLog, IS_DEV } from "@/lib/dev-log";
 import { zUuid } from "@/lib/validation";
+import { dbError } from "@/lib/db-error";
 
 const schema = z.object({
   source_type: z.enum(["card", "tanker"]),
@@ -70,7 +71,7 @@ export async function createFuelIssue(
 
   if (error) {
     devError("createFuelIssue", "ошибка вставки:", error);
-    return { ok: false, error: IS_DEV ? `БД: ${error.message}` : error.message };
+    return { ok: false, error: dbError("fleet/fuel/issue/actions", error) };
   }
   devLog("createFuelIssue", "успех, id:", data.id);
   return { ok: true, id: data.id };

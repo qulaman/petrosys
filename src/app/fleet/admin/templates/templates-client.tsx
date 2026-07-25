@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fmtDateTime } from "@/lib/format";
+import { downloadBase64, DOCX_MIME } from "@/lib/download";
 import { getTemplateUrl, replaceTemplate, testRenderTemplate, toggleTemplate, uploadTemplate } from "./actions";
 
 export interface TemplateRow {
@@ -99,16 +100,7 @@ export function TemplatesClient({ rows }: { rows: TemplateRow[] }) {
     start(async () => {
       const res = await testRenderTemplate(id);
       if (!res.ok) { toast.error(`Шаблон не прошёл проверку: ${res.error}`); return; }
-      const bin = atob(res.base64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "проверка-шаблона.docx";
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBase64("проверка-шаблона.docx", res.base64, DOCX_MIME);
       toast.success("Шаблон валиден — скачан тестовый документ на демо-данных");
     });
   }
@@ -167,7 +159,7 @@ export function TemplatesClient({ rows }: { rows: TemplateRow[] }) {
                 <td className="px-3 py-2">{fmtDateTime(t.updated_at)}</td>
                 <td className="px-3 py-2">
                   <button onClick={() => start(async () => { const r = await toggleTemplate(t.id, !t.is_active); if (r.ok) router.refresh(); else toast.error(r.error); })}>
-                    {t.is_active ? <CheckCircle2 className="size-5 text-green-600" /> : <span className="text-xs text-muted-foreground">выкл</span>}
+                    {t.is_active ? <CheckCircle2 className="size-5 text-success" /> : <span className="text-xs text-muted-foreground">выкл</span>}
                   </button>
                 </td>
                 <td className="px-3 py-2">

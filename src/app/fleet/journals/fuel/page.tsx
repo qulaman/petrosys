@@ -5,6 +5,8 @@ import { getCurrentProfile } from "@/lib/auth/current-user";
 import { resolvePeriod } from "@/lib/journals/period";
 import { loadFilterOptions, loadFuelJournal } from "@/lib/data/journals";
 
+export const metadata = { title: "Журнал выдачи ГСМ" };
+
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 

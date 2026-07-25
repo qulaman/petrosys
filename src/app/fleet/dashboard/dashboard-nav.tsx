@@ -51,7 +51,7 @@ export function DashboardNav({
         href="/fleet/dashboard/anomalies"
         className="ml-auto flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium hover:bg-accent"
       >
-        <AlertTriangle className="size-4 text-amber-600" />
+        <AlertTriangle className="size-4 text-warning" />
         Аномалии
         {badge}
         <LinkSpinner />

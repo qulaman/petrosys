@@ -5,9 +5,39 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { zUuid } from "@/lib/validation";
 import { devError, IS_DEV } from "@/lib/dev-log";
+import { dbError } from "@/lib/db-error";
 
 type Result = { ok: true; id?: string } | { ok: false; error: string };
+type Db = Awaited<ReturnType<typeof createClient>>;
 const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Машины карточки-источника, которых ещё нет в целевой карточке. Наследуются
+ * ТОЛЬКО номера машин (активная техника с учётом рейсов) — рейсы не копируются
+ * никогда, счётчики новой смены начинаются с нуля.
+ */
+async function vehiclesToInherit(
+  supabase: Db,
+  fromLineupId: string,
+  targetLineupId: string,
+): Promise<string[]> {
+  const [{ data: source }, { data: already }] = await Promise.all([
+    supabase.from("trip_lineup_vehicles").select("vehicle_id").eq("lineup_id", fromLineupId),
+    supabase.from("trip_lineup_vehicles").select("vehicle_id").eq("lineup_id", targetLineupId),
+  ]);
+  const ids = (source ?? []).map((r) => r.vehicle_id);
+  if (!ids.length) return [];
+
+  // Выведенная из парка или переведённая на моточасы техника не воскресает.
+  const { data: active } = await supabase
+    .from("vehicles")
+    .select("id")
+    .in("id", ids)
+    .eq("is_active", true)
+    .in("accounting_type", ["trips", "both"]);
+  const have = new Set((already ?? []).map((r) => r.vehicle_id));
+  return (active ?? []).map((v) => v.id).filter((id) => !have.has(id));
+}
 
 // -----------------------------------------------------------------------------
 // Этап 1 — вывод самосвалов на линию (перечень смены)
@@ -38,19 +68,13 @@ export async function createLineup(
       return { ok: true };
     }
     devError("createLineup", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
 
   if (d.inherit_from) {
-    const { data: prevVehicles } = await supabase
-      .from("trip_lineup_vehicles")
-      .select("vehicle_id")
-      .eq("lineup_id", d.inherit_from);
-    const rows = (prevVehicles ?? []).map((v) => ({
-      lineup_id: lineup.id,
-      vehicle_id: v.vehicle_id,
-    }));
-    if (rows.length) {
+    const ids = await vehiclesToInherit(supabase, d.inherit_from, lineup.id);
+    if (ids.length) {
+      const rows = ids.map((vehicle_id) => ({ lineup_id: lineup.id, vehicle_id }));
       const { error: vehErr } = await supabase.from("trip_lineup_vehicles").insert(rows);
       if (vehErr) devError("createLineup/inherit", vehErr);
     }
@@ -58,6 +82,50 @@ export async function createLineup(
 
   revalidatePath("/fleet/trips");
   return { ok: true, id: lineup.id };
+}
+
+/**
+ * Довывод машин прошлой смены в УЖЕ созданную карточку: перечень наследуется
+ * не только в момент создания (иначе при 60+ самосвалах остаётся ручной вывод
+ * по одной). Рейсы не переносятся — только номера машин.
+ */
+const inheritSchema = z.object({
+  lineup_id: zUuid,
+  from_lineup_id: zUuid,
+});
+
+export async function inheritLineupVehicles(
+  input: z.infer<typeof inheritSchema>,
+): Promise<{ ok: true; added: number } | { ok: false; error: string }> {
+  const p = inheritSchema.safeParse(input);
+  if (!p.success) return { ok: false, error: IS_DEV ? p.error.message : "Проверьте данные" };
+  const d = p.data;
+  if (d.lineup_id === d.from_lineup_id)
+    return { ok: false, error: "Нельзя наследовать эту же смену" };
+
+  const supabase = await createClient();
+  const { data: lineup } = await supabase
+    .from("trip_lineups")
+    .select("status")
+    .eq("id", d.lineup_id)
+    .maybeSingle();
+  if (!lineup) return { ok: false, error: "Карточка смены не найдена" };
+  if (lineup.status === "closed")
+    return { ok: false, error: "Смена закрыта мастером — перечень не меняется" };
+
+  const ids = await vehiclesToInherit(supabase, d.from_lineup_id, d.lineup_id);
+  if (!ids.length) return { ok: true, added: 0 };
+
+  const { data, error } = await supabase
+    .from("trip_lineup_vehicles")
+    .insert(ids.map((vehicle_id) => ({ lineup_id: d.lineup_id, vehicle_id })))
+    .select("id");
+  if (error) {
+    devError("inheritLineupVehicles", error);
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
+  }
+  revalidatePath("/fleet/trips");
+  return { ok: true, added: data?.length ?? 0 };
 }
 
 const lineupVehicleSchema = z.object({
@@ -75,7 +143,7 @@ export async function addLineupVehicle(
   const { error } = await supabase.from("trip_lineup_vehicles").insert(p.data);
   if (error && !error.message.includes("duplicate")) {
     devError("addLineupVehicle", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
   revalidatePath("/fleet/trips");
   return { ok: true };
@@ -122,7 +190,7 @@ export async function removeLineupVehicle(
     .delete()
     .eq("lineup_id", d.lineup_id)
     .eq("vehicle_id", d.vehicle_id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/trips/actions", error) };
   revalidatePath("/fleet/trips");
   return { ok: true };
 }
@@ -184,7 +252,7 @@ export async function createTrip(input: z.infer<typeof schema>): Promise<Result>
 
   if (error) {
     devError("createTrip", "ошибка вставки:", error);
-    return { ok: false, error: IS_DEV ? `БД: ${error.message}` : error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
   revalidatePath("/fleet/trips");
   return { ok: true, id: data.id };
@@ -200,7 +268,7 @@ export async function deleteTrip(id: string): Promise<{ ok: boolean; error?: str
   const { data, error } = await supabase.from("trip_records").delete().eq("id", id).select("id");
   if (error) {
     devError("deleteTrip", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
   if (!data?.length)
     return { ok: false, error: "Карточка смены уже закрыта — изменения только через офис" };
@@ -217,7 +285,7 @@ export async function deleteTrips(ids: string[]): Promise<{ ok: boolean; deleted
   const { data, error } = await supabase.from("trip_records").delete().in("id", p.data).select("id");
   if (error) {
     devError("deleteTrips", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
   const deleted = data?.length ?? 0;
   if (!deleted) return { ok: false, error: "Карточка смены уже закрыта — изменения только через офис" };
@@ -240,7 +308,7 @@ export async function deleteShiftTrips(lineupId: string): Promise<{ ok: boolean;
   const { data, error } = await supabase.from("trip_records").delete().eq("lineup_id", p.data).select("id");
   if (error) {
     devError("deleteShiftTrips", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
   const deleted = data?.length ?? 0;
   if (!deleted) return { ok: false, error: "Удалять нечего — либо карточка уже закрыта" };
@@ -287,7 +355,7 @@ export async function closeTripJournal(
     .select("id");
   if (error) {
     devError("closeTripJournal", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
   if (!data?.length) return { ok: false, error: "Карточка уже закрыта" };
   revalidatePath("/fleet/trips");
@@ -307,7 +375,7 @@ export async function deleteTripJournal(lineupId: string): Promise<Result> {
   const { error: te } = await supabase.from("trip_records").delete().eq("lineup_id", p.data);
   if (te) {
     devError("deleteTripJournal/trips", te);
-    return { ok: false, error: te.message };
+    return { ok: false, error: dbError("fleet/trips/actions", te) };
   }
   const { count: left } = await supabase
     .from("trip_records")
@@ -319,7 +387,7 @@ export async function deleteTripJournal(lineupId: string): Promise<Result> {
   const { data, error } = await supabase.from("trip_lineups").delete().eq("id", p.data).select("id");
   if (error) {
     devError("deleteTripJournal", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
   if (!data?.length)
     return { ok: false, error: "Карточка закрыта — удалить может только офис после переоткрытия" };
@@ -340,7 +408,7 @@ export async function reopenTripJournal(lineupId: string): Promise<Result> {
     .select("id");
   if (error) {
     devError("reopenTripJournal", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/trips/actions", error) };
   }
   if (!data?.length)
     return { ok: false, error: "Переоткрыть может только офис или администратор" };

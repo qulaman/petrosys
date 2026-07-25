@@ -2,6 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 import { ForecastForm } from "./forecast-form";
 
+export const metadata = { title: "Параметры прогноза" };
+
 export default async function ForecastSettingsPage() {
   const supabase = await createClient();
   const { data } = await supabase.from("forecast_settings").select("*").maybeSingle();

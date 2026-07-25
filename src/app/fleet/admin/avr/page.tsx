@@ -2,6 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { loadAvrRegistry } from "@/lib/data/avr-registry";
 import { AvrRegistryClient } from "./avr-client";
 
+export const metadata = { title: "Справочник АВР" };
+
 /** Справочник АВР: ИП → машины → версии условий (час/рейс/ГСМ) + водители. */
 export default async function AvrRegistryPage() {
   const data = await loadAvrRegistry();

@@ -87,7 +87,7 @@ export function TripJournal({
           <span className="rounded-md border px-2.5 py-1">Рейсов <b className="tabular-nums">{fmtInt(rows.length)}</b></span>
           <span className="rounded-md border px-2.5 py-1 text-muted-foreground">машин <b className="tabular-nums">{vehiclesCount}</b></span>
           {draftCount > 0 ? (
-            <span className="rounded-md border border-amber-500/40 px-2.5 py-1 text-amber-700 dark:text-amber-500">
+            <span className="rounded-md border border-warning/40 px-2.5 py-1 text-warning">
               черновых <b className="tabular-nums">{draftCount}</b>
             </span>
           ) : null}
@@ -117,7 +117,7 @@ export function TripJournal({
                     {fmtDateTime(r.at)}
                     {r.delayed ? (
                       <Timer
-                        className="size-3.5 text-amber-600"
+                        className="size-3.5 text-warning"
                         aria-label="Отправлен позже"
                       />
                     ) : null}
@@ -129,7 +129,7 @@ export function TripJournal({
                 <td className="px-3 py-2 font-medium">
                   {r.reg}
                   {r.draft ? (
-                    <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-normal text-amber-700 dark:text-amber-500">
+                    <span className="ml-1.5 rounded bg-warning/15 px-1.5 py-0.5 text-xs font-normal text-warning">
                       черновик
                     </span>
                   ) : null}

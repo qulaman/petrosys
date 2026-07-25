@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
 import { BackButton } from "@/components/back-button";
 import { NavBar, TitleIcon, type NavItem } from "@/components/nav-bar";
+import { PageHeader } from "@/components/ui/page-header";
+import { OutboxIndicator } from "@/components/field/outbox-indicator";
 import { ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import { ru } from "@/lib/i18n/ru";
 
@@ -30,10 +32,16 @@ const NAV: (NavItem & { roles: Role[] })[] = [
 export async function AppShell({
   requiredRoles,
   title,
+  description,
+  actions,
   children,
 }: {
   requiredRoles?: Role[];
   title: string;
+  /** Пояснение под заголовком — что это за экран и как им пользоваться. */
+  description?: string;
+  /** Действия уровня экрана (выгрузка, «создать») — справа от заголовка. */
+  actions?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const current = await getCurrentProfile();
@@ -57,12 +65,24 @@ export async function AppShell({
   );
 
   const showTopNav = isOffice && navItems.length > 1;
+  // Tab-bar из одного пункта — плашка на весь экран ради единственной кнопки;
+  // у checker'а так и было. Один пункт — навигация не нужна.
+  const showBottomNav = !isOffice && navItems.length > 1;
 
   return (
     <div
       className="flex min-h-full flex-1 flex-col"
-      // Суммарная высота закреплённой шапки — от неё отталкиваются нижние sticky-уровни.
-      style={{ "--app-sticky-top": showTopNav ? "100px" : "56px" } as React.CSSProperties}
+      style={
+        {
+          // Суммарная высота закреплённой шапки — от неё отталкиваются нижние sticky-уровни.
+          "--app-sticky-top": showTopNav ? "100px" : "56px",
+          // Отступ снизу для закреплённых панелей действий: высота tab-bar, если он есть,
+          // иначе только безопасная зона. Без этого главная кнопка экрана уходит под меню.
+          "--app-bottom-nav": showBottomNav
+            ? "calc(4rem + env(safe-area-inset-bottom))"
+            : "env(safe-area-inset-bottom)",
+        } as React.CSSProperties
+      }
     >
       <div className="sticky top-0 z-40 bg-background">
         <header className="flex h-14 items-center justify-between gap-3 border-b px-4">
@@ -73,6 +93,7 @@ export async function AppShell({
             </span>
           </div>
           <div className="flex items-center gap-1">
+            <OutboxIndicator className="mr-1" />
             <ThemeToggle />
             <form action={signOut}>
               <Button variant="ghost" size="sm" type="submit">
@@ -85,18 +106,17 @@ export async function AppShell({
         {showTopNav ? <NavBar items={navItems} variant="top" /> : null}
       </div>
 
-      <main className={cn("flex-1 p-4", !isOffice ? "pb-24" : "")}>
-        <h1 className="mb-4 flex items-center gap-2 text-xl font-semibold">
-          <BackButton />
-          <TitleIcon />
-          {title}
-        </h1>
-        {children ?? (
-          <p className="text-sm text-muted-foreground">Экран в разработке.</p>
-        )}
+      <main className={cn("flex-1 p-4", showBottomNav ? "pb-24" : "")}>
+        <PageHeader
+          title={title}
+          description={description}
+          actions={actions}
+          leading={<><BackButton /><TitleIcon /></>}
+        />
+        {children}
       </main>
 
-      {!isOffice && navItems.length >= 1 ? <NavBar items={navItems} variant="bottom" /> : null}
+      {showBottomNav ? <NavBar items={navItems} variant="bottom" /> : null}
     </div>
   );
 }

@@ -4,6 +4,8 @@ import { resolvePeriod } from "@/lib/journals/period";
 import { loadFuelJournal } from "@/lib/data/journals";
 import { fmtDateTime, fmtLiters } from "@/lib/format";
 
+export const metadata = { title: "Выданное топливо" };
+
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 

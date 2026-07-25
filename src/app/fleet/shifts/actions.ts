@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { zUuid } from "@/lib/validation";
 import { devError, IS_DEV } from "@/lib/dev-log";
+import { dbError } from "@/lib/db-error";
 
 type Result = { ok: true; id?: string } | { ok: false; error: string };
 const dateRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -45,7 +46,7 @@ export async function createJournal(
     devError("createJournal", error);
     const msg = error.message.includes("duplicate")
       ? "Журнал на эту смену уже существует"
-      : error.message;
+      : dbError("fleet/shifts/actions", error, "Не удалось создать журнал");
     return { ok: false, error: msg };
   }
 
@@ -107,7 +108,7 @@ export async function updateJournal(
     .update(upd)
     .eq("id", journalId)
     .neq("status", "closed"); // закрытый журнал не правится
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/shifts/actions", error) };
 
   // Вид работ дублируем в строки (документ-строки самодостаточны).
   if ("work_type_id" in patch) {
@@ -152,7 +153,7 @@ export async function addLine(input: z.infer<typeof addLineSchema>): Promise<Res
     work_type_id: j.work_type_id,
   });
   if (error) {
-    if (!error.message.includes("duplicate")) return { ok: false, error: error.message };
+    if (!error.message.includes("duplicate")) return { ok: false, error: dbError("fleet/shifts/actions", error) };
 
     // Конфликт уникальности (машина, дата, смена). Если существующая запись —
     // «сирота» без журнала (старый табель), усыновляем её вместо ошибки.
@@ -169,7 +170,7 @@ export async function addLine(input: z.infer<typeof addLineSchema>): Promise<Res
         .from("shift_records")
         .update({ journal_id: p.data.journal_id })
         .eq("id", existing.id);
-      if (adoptErr) return { ok: false, error: adoptErr.message };
+      if (adoptErr) return { ok: false, error: dbError("fleet/shifts/actions", adoptErr) };
       revalidatePath("/fleet/shifts");
       return { ok: true };
     }
@@ -204,7 +205,7 @@ export async function updateLine(
   }
 
   const { error } = await supabase.from("shift_records").update(upd).eq("id", d.line_id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/shifts/actions", error) };
   revalidatePath("/fleet/shifts");
   return { ok: true };
 }
@@ -212,7 +213,7 @@ export async function updateLine(
 export async function removeLine(lineId: string): Promise<Result> {
   const supabase = await createClient();
   const { error } = await supabase.from("shift_records").delete().eq("id", lineId);
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: dbError("fleet/shifts/actions", error) };
   revalidatePath("/fleet/shifts");
   return { ok: true };
 }
@@ -253,7 +254,7 @@ export async function closeJournal(
     .neq("status", "closed");
   if (error) {
     devError("closeJournal", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/shifts/actions", error) };
   }
 
   // Дублируем подпись мастера в строки — каждая запись самодостаточна как документ.
@@ -284,7 +285,7 @@ export async function reopenJournal(journalId: string): Promise<Result> {
     .eq("status", "closed");
   if (error) {
     devError("reopenJournal", error);
-    return { ok: false, error: error.message };
+    return { ok: false, error: dbError("fleet/shifts/actions", error) };
   }
   await supabase
     .from("shift_records")

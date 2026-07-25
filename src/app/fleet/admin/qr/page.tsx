@@ -2,6 +2,8 @@ import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 import { QrStickers } from "./qr-stickers";
 
+export const metadata = { title: "QR-наклейки на технику" };
+
 export default async function QrPage() {
   const supabase = await createClient();
   const { data } = await supabase

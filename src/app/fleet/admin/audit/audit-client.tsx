@@ -21,9 +21,9 @@ const ACTION_FILTERS: { key: string; label: string }[] = [
 ];
 
 const ACTION_TONE: Record<string, StatusTone> = {
-  insert: "green",
-  update: "amber",
-  delete: "red",
+  insert: "success",
+  update: "warning",
+  delete: "danger",
 };
 
 export function AuditClient({

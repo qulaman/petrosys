@@ -1,6 +1,9 @@
 import { AppShell } from "@/components/app-shell";
 import { loadTripsData } from "@/lib/data/trips";
 import { TripsClient } from "./trips-client";
+import { TIME_ZONE } from "@/lib/format";
+
+export const metadata = { title: "Фиксация рейсов" };
 
 type SP = Record<string, string | string[] | undefined>;
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -8,7 +11,7 @@ const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 /** Текущая смена по времени Актобе: день 07–19, ночь 19–07 (до 07 утра — ночь вчерашней даты). */
 function currentShiftAqtobe(): { date: string; shift: "day" | "night" } {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Aqtobe",
+    timeZone: TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

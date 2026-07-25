@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/logo";
 import { BackButton } from "@/components/back-button";
 import { NavBar, TitleIcon, type NavItem } from "@/components/nav-bar";
+import { PageHeader } from "@/components/ui/page-header";
 import { ru } from "@/lib/i18n/ru";
 
 const NAV: NavItem[] = [
@@ -19,9 +20,12 @@ const NAV: NavItem[] = [
 /** Отдельный layout портала подрядчика (read-only, роль contractor). */
 export async function PortalShell({
   title,
+  description,
   children,
 }: {
   title: string;
+  /** Пояснение под заголовком. */
+  description?: string;
   children?: React.ReactNode;
 }) {
   const current = await getCurrentProfile();
@@ -48,11 +52,11 @@ export async function PortalShell({
       <NavBar items={NAV} variant="top" />
 
       <main className="flex-1 p-4">
-        <h1 className="mb-4 flex items-center gap-2 text-xl font-semibold">
-          <BackButton />
-          <TitleIcon />
-          {title}
-        </h1>
+        <PageHeader
+          title={title}
+          description={description}
+          leading={<><BackButton /><TitleIcon /></>}
+        />
         {children}
       </main>
     </div>

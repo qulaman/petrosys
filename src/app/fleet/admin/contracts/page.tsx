@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { loadContractsList } from "@/lib/data/contracts-admin";
 import { ContractsList } from "./contracts-list";
 
+export const metadata = { title: "Договоры" };
+
 export default async function ContractsPage() {
   const supabase = await createClient();
   const [contracts, contractorsRes, templatesRes] = await Promise.all([

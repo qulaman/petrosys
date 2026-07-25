@@ -6,6 +6,15 @@ import { ENTITIES } from "@/lib/admin/registry";
 import { vehicleTypeLabel } from "@/lib/domain";
 import { CrudTable } from "@/components/admin/crud-table";
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ entity: string }>;
+}) {
+  const { entity } = await params;
+  return { title: ENTITIES[entity]?.title ?? "Справочник" };
+}
+
 export default async function EntityPage({
   params,
 }: {

@@ -32,24 +32,56 @@ export function SignaturePad({
     });
     padRef.current = pad;
 
+    // Размер холста в CSS-пикселях на момент последней настройки. Нужен, чтобы
+    // пересчитать координаты уже нарисованных штрихов при смене размера.
+    let cssW = 0;
+    let cssH = 0;
+
     const resize = () => {
-      const ratio = Math.max(window.devicePixelRatio || 1, 1);
       const { width, height } = canvas.getBoundingClientRect();
+      if (!width || !height) return;
+      // Мобильные браузеры шлют resize при показе/скрытии адресной строки —
+      // если размер тот же, трогать холст нельзя.
+      if (width === cssW && height === cssH) return;
+
+      // Поворот телефона раньше стирал подпись: canvas.width сбрасывает холст,
+      // а старый код после этого ещё и звал pad.clear(). Сохраняем штрихи и
+      // переносим их в новые пропорции.
+      const strokes = pad.toData();
+      const scaleX = cssW ? width / cssW : 1;
+      const scaleY = cssH ? height / cssH : 1;
+
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
       canvas.width = width * ratio;
       canvas.height = height * ratio;
       canvas.getContext("2d")?.scale(ratio, ratio);
-      pad.clear();
-      setEmpty(true);
+      cssW = width;
+      cssH = height;
+
+      if (strokes.length) {
+        pad.fromData(
+          strokes.map((g) => ({
+            ...g,
+            points: g.points.map((p) => ({ ...p, x: p.x * scaleX, y: p.y * scaleY })),
+          })),
+        );
+      } else {
+        pad.clear();
+      }
+      setEmpty(pad.isEmpty());
     };
     resize();
 
     const onEnd = () => setEmpty(pad.isEmpty());
     pad.addEventListener("endStroke", onEnd);
     window.addEventListener("resize", resize);
+    // Поворот экрана на части устройств приходит только этим событием.
+    window.addEventListener("orientationchange", resize);
 
     return () => {
       pad.removeEventListener("endStroke", onEnd);
       window.removeEventListener("resize", resize);
+      window.removeEventListener("orientationchange", resize);
       pad.off();
     };
   }, []);
@@ -86,7 +118,7 @@ export function SignaturePad({
       <button
         type="button"
         onClick={onCancel}
-        className="pb-4 text-sm text-muted-foreground underline"
+        className="min-h-11 pb-4 text-sm text-muted-foreground underline"
       >
         Отмена
       </button>
