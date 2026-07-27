@@ -6,6 +6,7 @@ import { getCurrentProfile } from "@/lib/auth/current-user";
 import { resolvePeriod, type ResolvedPeriod } from "@/lib/journals/period";
 import { loadClosedJournalIds, loadOpenLineupIds, resolveFuelPrice, resolveRate, tripCounted, type RatePriceRow } from "@/lib/data/money";
 import { aqtobeDate } from "@/lib/tz";
+import { vehicleTypeLabel } from "@/lib/domain";
 
 export type EventKind = "fuel" | "trip" | "shift";
 
@@ -604,9 +605,25 @@ export interface ContractMoney {
   penalty: number;
   net: number;
   forecast: number;
-  tripsCount: number;
-  hoursSum: number;
-  /** Эффективная стоимость: net/рейс и net/час (сравнение подрядчиков). */
+}
+/**
+ * Эффективная стоимость — строка на (договор × вид техники). Разводить виды
+ * обязательно: ₸/час экскаватора и катка — разные величины, усреднять их по
+ * договору и сравнивать подрядчиков по такому числу нельзя.
+ */
+export interface EffectiveCostRow {
+  contractId: string;
+  number: string;
+  contractor: string;
+  vehicleType: string;
+  /** Всего за период и из них тарифицированных (есть ставка в прайсе). */
+  trips: number;
+  billedTrips: number;
+  hours: number;
+  billedHours: number;
+  volume: number;
+  billedVolume: number;
+  /** net своей части начислений, делённый на ТАРИФИЦИРОВАННОЕ количество. */
   costPerTrip: number | null;
   costPerHour: number | null;
   /** Тенге за м³ перевезённого грунта (объём — из маршрута). */
@@ -644,10 +661,13 @@ export interface UnbilledSummary {
 }
 export interface MoneyTabData {
   contracts: ContractMoney[];
+  effective: EffectiveCostRow[];
   summary: MoneySummary;
   daily: MoneyDailyPoint[];
   unbilled: UnbilledRow[];
   unbilledSummary: UnbilledSummary;
+  /** Заполнены ли объёмы маршрутов — без них колонка ₸/м³ мертва. */
+  volumesFilled: boolean;
 }
 
 function daysBetween(a: string, b: string): number {
@@ -709,16 +729,43 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
       .push({ price: Number(f.price_per_liter), valid_from: f.valid_from });
   }
 
-  // Агрегация начислений/удержаний по договорам одним проходом.
-  // Начисления за рейсы и за часы копятся РАЗДЕЛЬНО: эффективная стоимость
-  // (₸/рейс, ₸/час) считается каждая от своей части, иначе у смешанных
-  // договоров часовые начисления попадают в «стоимость рейса» и наоборот.
-  const acc = new Map<string, { accrualTrips: number; accrualHours: number; fuelHold: number; penalty: number; trips: number; hours: number; volume: number }>();
+  // Агрегация начислений/удержаний по договорам одним проходом — деньги «к оплате».
+  const acc = new Map<string, { accrual: number; fuelHold: number; penalty: number }>();
   const bucket = (cid: string) => {
     let b = acc.get(cid);
-    if (!b) { b = { accrualTrips: 0, accrualHours: 0, fuelHold: 0, penalty: 0, trips: 0, hours: 0, volume: 0 }; acc.set(cid, b); }
+    if (!b) { b = { accrual: 0, fuelHold: 0, penalty: 0 }; acc.set(cid, b); }
     return b;
   };
+
+  // Параллельно — вёдра эффективной стоимости на (договор × вид техники).
+  // Начисления за рейсы и за часы копятся РАЗДЕЛЬНО: ₸/рейс и ₸/час считается
+  // каждая от своей части, иначе у смешанных договоров часовые начисления
+  // попадают в «стоимость рейса» и наоборот.
+  interface EffBucket {
+    contractId: string;
+    vehicleType: string;
+    accrualTrips: number;
+    accrualHours: number;
+    trips: number; billedTrips: number;
+    hours: number; billedHours: number;
+    volume: number; billedVolume: number;
+    fuelHold: number; // только по машинам, чья работа тарифицирована
+    penalty: number;  // договорный, разносится после агрегации
+  }
+  const eff = new Map<string, EffBucket>();
+  const effBucket = (contractId: string, vehicleType: string) => {
+    const k = `${contractId}|${vehicleType}`;
+    let b = eff.get(k);
+    if (!b) {
+      b = { contractId, vehicleType, accrualTrips: 0, accrualHours: 0, trips: 0, billedTrips: 0, hours: 0, billedHours: 0, volume: 0, billedVolume: 0, fuelHold: 0, penalty: 0 };
+      eff.set(k, b);
+    }
+    return b;
+  };
+  // Машины, чья работа за период получила ставку. Их ГСМ — себестоимость
+  // тарифицированной работы; ГСМ машин без ставки в эффективную стоимость не
+  // идёт (в договорное удержание — идёт, оно фактическое).
+  const accruedVehicles = new Set<string>();
 
   // Работа вне расчётов: нет договора или нет ставки в прайсе → в деньги не попала.
   const unbilledMap = new Map<string, UnbilledRow>();
@@ -747,12 +794,22 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     const v = vehById.get(t.vehicle_id);
     if (!v) continue;
     if (!v.contract_id) { unbilled(v, "no_contract").trips += 1; continue; }
-    const b = bucket(v.contract_id);
-    b.trips += 1;
-    b.volume += routeVolume.get(t.route_id) ?? 0;
-    const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "trip", v.id, v.vehicle_type, aqtobeDate(t.created_at));
-    if (rate != null) { b.accrualTrips += rate; addDayAccrual(aqtobeDate(t.created_at), rate); }
-    else unbilled(v, "no_rate").trips += 1;
+    const day = aqtobeDate(t.created_at);
+    const volume = routeVolume.get(t.route_id) ?? 0;
+    const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "trip", v.id, v.vehicle_type, day);
+    const e = effBucket(v.contract_id, v.vehicle_type);
+    e.trips += 1;
+    e.volume += volume;
+    if (rate != null) {
+      bucket(v.contract_id).accrual += rate;
+      addDayAccrual(day, rate);
+      // В знаменатель ₸/рейс идут ТОЛЬКО тарифицированные рейсы: рейс без ставки
+      // не оплачивается, и делить на него — занижать стоимость в разы.
+      e.accrualTrips += rate;
+      e.billedTrips += 1;
+      e.billedVolume += volume;
+      accruedVehicles.add(v.id);
+    } else unbilled(v, "no_rate").trips += 1;
   }
   for (const s of shiftsRows) {
     if (s.journal_id && !closedJournals.has(s.journal_id)) continue; // черновики не оплачиваются
@@ -760,34 +817,48 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     if (!v) continue;
     const hours = Number(s.hours);
     if (!v.contract_id) { unbilled(v, "no_contract").hours += hours; continue; }
-    const b = bucket(v.contract_id);
-    b.hours += hours;
     const rate = resolveRate(pricesByContract.get(v.contract_id) ?? [], "hour", v.id, v.vehicle_type, s.shift_date);
-    if (rate != null) { b.accrualHours += rate * hours; addDayAccrual(s.shift_date, rate * hours); }
-    else unbilled(v, "no_rate").hours += hours;
+    const e = effBucket(v.contract_id, v.vehicle_type);
+    e.hours += hours;
+    if (rate != null) {
+      bucket(v.contract_id).accrual += rate * hours;
+      addDayAccrual(s.shift_date, rate * hours);
+      e.accrualHours += rate * hours;
+      e.billedHours += hours;
+      accruedVehicles.add(v.id);
+    } else unbilled(v, "no_rate").hours += hours;
   }
   for (const f of fuelRows) {
     const v = vehById.get(f.vehicle_id);
     if (!v?.contract_id) continue;
     const price = resolveFuelPrice(fuelPricesByContract.get(v.contract_id) ?? [], aqtobeDate(f.created_at));
-    if (price != null) bucket(v.contract_id).fuelHold += price * Number(f.liters);
+    if (price == null) continue;
+    const amount = price * Number(f.liters);
+    bucket(v.contract_id).fuelHold += amount;
+    if (accruedVehicles.has(v.id)) effBucket(v.contract_id, v.vehicle_type).fuelHold += amount;
+  }
+  // Штраф договорный, к виду техники не привязан — разносим пропорционально начислению.
+  const effByContract = new Map<string, EffBucket[]>();
+  for (const b of eff.values()) {
+    (effByContract.get(b.contractId) ?? effByContract.set(b.contractId, []).get(b.contractId))!.push(b);
   }
   for (const p of penaltiesRes.data ?? []) {
     bucket(p.contract_id).penalty += Number(p.amount);
+    const list = effByContract.get(p.contract_id) ?? [];
+    const total = list.reduce((s, b) => s + b.accrualTrips + b.accrualHours, 0);
+    if (total <= 0) continue;
+    for (const b of list) b.penalty += Number(p.amount) * ((b.accrualTrips + b.accrualHours) / total);
   }
 
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+
   const contracts: ContractMoney[] = (contractsRes.data ?? []).map((c) => {
-    const b = acc.get(c.id) ?? { accrualTrips: 0, accrualHours: 0, fuelHold: 0, penalty: 0, trips: 0, hours: 0, volume: 0 };
-    const accrual = Math.round((b.accrualTrips + b.accrualHours) * 100) / 100;
-    const fuelHold = Math.round(b.fuelHold * 100) / 100;
-    const penalty = Math.round(b.penalty * 100) / 100;
-    const net = Math.round((accrual - fuelHold - penalty) * 100) / 100;
-    // Общедоговорные удержания (ГСМ, штрафы) распределяются между рейсовой и
-    // часовой частью пропорционально начислению — каждая метрика делит СВОЮ часть.
-    const accrualSum = b.accrualTrips + b.accrualHours;
-    const holds = fuelHold + penalty;
-    const netTrips = accrualSum > 0 ? b.accrualTrips - holds * (b.accrualTrips / accrualSum) : 0;
-    const netHours = accrualSum > 0 ? b.accrualHours - holds * (b.accrualHours / accrualSum) : 0;
+    const b = acc.get(c.id) ?? { accrual: 0, fuelHold: 0, penalty: 0 };
+    const accrual = round2(b.accrual);
+    const fuelHold = round2(b.fuelHold);
+    const penalty = round2(b.penalty);
+    const net = round2(accrual - fuelHold - penalty);
     return {
       id: c.id,
       number: c.number,
@@ -798,17 +869,40 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
       penalty,
       net,
       forecast: Math.round((net / elapsed) * totalDays),
-      tripsCount: b.trips,
-      hoursSum: b.hours,
-      costPerTrip: b.trips > 0 && b.accrualTrips > 0 ? Math.round(netTrips / b.trips) : null,
-      costPerHour: b.hours > 0 && b.accrualHours > 0 ? Math.round(netHours / b.hours) : null,
-      tengePerM3: b.volume > 0 && b.accrualTrips > 0 ? Math.round(netTrips / b.volume) : null,
     };
   });
   contracts.sort((a, b) => a.number.localeCompare(b.number, "ru"));
 
+  // Эффективная стоимость: удержания (ГСМ, штрафы) распределяются между рейсовой
+  // и часовой частью пропорционально начислению — каждая метрика делит СВОЮ часть.
+  const effective: EffectiveCostRow[] = [...eff.values()].map((b) => {
+    const contract = contractById.get(b.contractId);
+    const accrualSum = b.accrualTrips + b.accrualHours;
+    const holds = b.fuelHold + b.penalty;
+    const netTrips = accrualSum > 0 ? b.accrualTrips - holds * (b.accrualTrips / accrualSum) : 0;
+    const netHours = accrualSum > 0 ? b.accrualHours - holds * (b.accrualHours / accrualSum) : 0;
+    return {
+      contractId: b.contractId,
+      number: contract?.number ?? "—",
+      contractor: contract ? contractorById.get(contract.contractor_id)?.name ?? "—" : "—",
+      vehicleType: b.vehicleType,
+      trips: b.trips,
+      billedTrips: b.billedTrips,
+      hours: round1(b.hours),
+      billedHours: round1(b.billedHours),
+      volume: Math.round(b.volume),
+      billedVolume: Math.round(b.billedVolume),
+      costPerTrip: b.billedTrips > 0 && b.accrualTrips > 0 ? Math.round(netTrips / b.billedTrips) : null,
+      costPerHour: b.billedHours > 0 && b.accrualHours > 0 ? Math.round(netHours / b.billedHours) : null,
+      tengePerM3: b.billedVolume > 0 && b.accrualTrips > 0 ? Math.round(netTrips / b.billedVolume) : null,
+    };
+  });
+  effective.sort((a, b) =>
+    a.contractor.localeCompare(b.contractor, "ru")
+    || a.number.localeCompare(b.number, "ru")
+    || vehicleTypeLabel(a.vehicleType).localeCompare(vehicleTypeLabel(b.vehicleType), "ru"));
+
   // Сводка периода.
-  const round2 = (n: number) => Math.round(n * 100) / 100;
   const sumAccrual = round2(contracts.reduce((s, c) => s + c.accrual, 0));
   const sumFuelHold = round2(contracts.reduce((s, c) => s + c.fuelHold, 0));
   const sumPenalty = round2(contracts.reduce((s, c) => s + c.penalty, 0));
@@ -848,5 +942,13 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     vehicles: unbilledRows.length,
   };
 
-  return { contracts, summary, daily, unbilled: unbilledRows, unbilledSummary };
+  return {
+    contracts,
+    effective,
+    summary,
+    daily,
+    unbilled: unbilledRows,
+    unbilledSummary,
+    volumesFilled: [...routeVolume.values()].some((v) => v != null),
+  };
 }

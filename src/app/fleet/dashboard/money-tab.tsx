@@ -10,8 +10,10 @@ import {
 import { AlertTriangle, ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, ChevronDown, Coins, Fuel, Gavel, TrendingUp, Wallet } from "lucide-react";
 import { fmtMoney, fmtInt } from "@/lib/format";
 import { EmptyState } from "@/components/ui/empty-state";
+import { InfoHint } from "@/components/ui/info-hint";
+import { vehicleTypeLabel } from "@/lib/domain";
 import { cn } from "@/lib/utils";
-import type { ContractMoney, MoneyTabData } from "@/lib/data/dashboard";
+import type { MoneyTabData } from "@/lib/data/dashboard";
 
 // Категориальная палитра из темы (см. globals.css) — корректна в light/dark/sun.
 const PIE_COLORS = [
@@ -53,12 +55,43 @@ function StatTile({ label, value, sub, icon: Icon, accent }: {
   );
 }
 
+/** Количество как «оплачено / всего»: расхождение — это дыра в прайсе договора. */
+function QtyCell({ total, billed }: { total: number; billed: number }) {
+  if (total <= 0) return <span className="text-muted-foreground">—</span>;
+  if (billed >= total) return <>{fmtInt(total)}</>;
+  return (
+    <>
+      {fmtInt(billed)} <span className="text-muted-foreground">/ {fmtInt(total)}</span>
+    </>
+  );
+}
+
+/**
+ * Метрика или причина её отсутствия. Прочерк раньше означал три разные вещи —
+ * теперь «работы такого типа не было» и «работа есть, а ставки нет» различимы:
+ * второе — потеря денег, и ведёт прямо в прайс договора.
+ */
+function MetricCell({ value, qty, contractId }: { value: number | null; qty: number; contractId: string }) {
+  if (value != null) return <>{fmtMoney(value)}</>;
+  if (qty <= 0) return <span className="font-normal text-muted-foreground">—</span>;
+  return (
+    <Link
+      href={`/fleet/admin/contracts/${contractId}`}
+      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning hover:bg-warning/20"
+      title="Открыть договор — добавить ставку в прайс"
+    >
+      <span className="size-1.5 rounded-full bg-current" />
+      нет ставки
+    </Link>
+  );
+}
+
 export function MoneyTab({ data }: { data: MoneyTabData }) {
   const sp = useSearchParams();
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "net", desc: true });
   const [unbilledOpen, setUnbilledOpen] = useState(false);
 
-  const settlementHref = (c: ContractMoney) => {
+  const settlementHref = (c: { id: string }) => {
     const q = new URLSearchParams({ contract: c.id });
     for (const k of ["period", "from", "to"]) {
       const v = sp.get(k);
@@ -80,7 +113,6 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
   }, [data.contracts, sort]);
 
   const s = data.summary;
-  const effectiveRows = rows.filter((c) => c.tripsCount > 0 || c.hoursSum > 0);
 
   // Рейтинг подрядчиков по «к оплате»: топ-6 секторов + «Прочие», нумерация 1..N.
   const ranking = useMemo(() => {
@@ -261,45 +293,79 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
 
       {/* Эффективная стоимость */}
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium">Эффективная стоимость (к оплате с учётом удержаний)</h3>
+        <div className="flex flex-col gap-1">
+          <h3 className="text-sm font-medium">Эффективная стоимость</h3>
+          <p className="text-sm text-muted-foreground">
+            Во что фактически обходится рейс и моточас у каждого подрядчика после удержания ГСМ и штрафов.
+            Прямое сравнение подрядчиков между собой — база для пересмотра ставок.
+          </p>
+        </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left">
+            {/* Шапка непрозрачная (bg-muted, не /50): под sticky-колонкой при
+                горизонтальном скролле не должно просвечивать содержимое. */}
+            <thead className="bg-muted text-left">
               <tr>
-                <th className="px-3 py-2">Подрядчик · договор</th>
-                <th className="px-3 py-2 text-right">Рейсов</th>
-                <th className="px-3 py-2 text-right" title="Начислено за рейсы минус доля удержаний, делённое на число рейсов. Часовые начисления сюда не входят.">₸/рейс</th>
-                <th className="px-3 py-2 text-right">Часов</th>
-                <th className="px-3 py-2 text-right" title="Начислено за моточасы минус доля удержаний, делённое на часы. Рейсовые начисления сюда не входят.">₸/час</th>
-                <th className="px-3 py-2 text-right" title="Рейсовая часть «к оплате», делённая на кубометры перевезённого грунта (объём — из маршрута).">₸/м³ грунта</th>
+                <th className="sticky left-0 z-10 bg-muted px-3 py-2">Подрядчик · договор</th>
+                <th className="px-3 py-2">Вид техники</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">
+                  Рейсов <InfoHint text="Оплачено / всего за период. Если числа расходятся — часть рейсов без ставки в прайсе договора, они не оплачиваются и в стоимость рейса не входят." />
+                </th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">
+                  ₸/рейс <InfoHint text="Начислено за рейсы минус доля удержаний (ГСМ и штрафы), делённое на число ОПЛАЧЕННЫХ рейсов. Часовые начисления сюда не входят." />
+                </th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">
+                  Часов <InfoHint text="Оплачено / всего за период. Считаются только смены из закрытых журналов — черновики не оплачиваются." />
+                </th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">
+                  ₸/час <InfoHint text="Начислено за моточасы минус доля удержаний (ГСМ и штрафы), делённое на число ОПЛАЧЕННЫХ часов. Рейсовые начисления сюда не входят." />
+                </th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">
+                  ₸/м³ грунта <InfoHint text={data.volumesFilled
+                    ? "Рейсовая часть «к оплате», делённая на кубометры перевезённого грунта. Объём рейса берётся из маршрута."
+                    : "Метрика не считается: в справочнике маршрутов не заполнены объёмы (м³ за рейс). Заполните их — колонка оживёт без других правок."} />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {effectiveRows.map((c) => (
-                <tr key={c.id} className="hover:bg-accent/40">
-                  <td className="px-3 py-2">
-                    <Link href={settlementHref(c)} className="hover:underline">
-                      {c.contractor} <span className="text-muted-foreground">· {c.number}</span>
+              {data.effective.map((r) => (
+                <tr key={`${r.contractId}|${r.vehicleType}`} className="hover:bg-accent/40">
+                  <td className="sticky left-0 z-10 bg-background px-3 py-2">
+                    <Link href={settlementHref({ id: r.contractId })} className="hover:underline">
+                      {r.contractor} <span className="text-muted-foreground">· {r.number}</span>
                     </Link>
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtInt(c.tripsCount)}</td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">{c.costPerTrip != null ? fmtMoney(c.costPerTrip) : "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtInt(c.hoursSum)}</td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">{c.costPerHour != null ? fmtMoney(c.costPerHour) : "—"}</td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums">{c.tengePerM3 != null ? fmtMoney(c.tengePerM3) : "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{vehicleTypeLabel(r.vehicleType)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums"><QtyCell total={r.trips} billed={r.billedTrips} /></td>
+                  <td className="px-3 py-2 text-right font-medium tabular-nums">
+                    <MetricCell value={r.costPerTrip} qty={r.trips} contractId={r.contractId} />
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums"><QtyCell total={r.hours} billed={r.billedHours} /></td>
+                  <td className="px-3 py-2 text-right font-medium tabular-nums">
+                    <MetricCell value={r.costPerHour} qty={r.hours} contractId={r.contractId} />
+                  </td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                    {r.tengePerM3 != null ? fmtMoney(r.tengePerM3) : <span className="font-normal text-muted-foreground">—</span>}
+                  </td>
                 </tr>
               ))}
-              {effectiveRows.length === 0 ? (
-                <tr><td colSpan={6}><EmptyState icon={Wallet} title="Нет работ за период" className="border-0 p-6" /></td></tr>
+              {data.effective.length === 0 ? (
+                <tr><td colSpan={7}><EmptyState icon={Wallet} title="Нет работ за период" className="border-0 p-6" /></td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
         <p className="text-xs text-muted-foreground">
-          ₸/рейс и ₸/час считаются каждая от своей части начислений (рейсовой и часовой) — у смешанных договоров
-          они не пересекаются; удержания ГСМ и штрафы распределены пропорционально. ₸/м³ — рейсовая часть на кубометр
-          перевезённого грунта (объём рейса из маршрута) — ключевая метрика себестоимости.
+          Строка — договор и вид техники: ₸/час экскаватора и катка несравнимы, поэтому они разведены.
+          Количества показаны как «оплачено / всего» — в стоимость входит только тарифицированная работа.
+          Удержания ГСМ и штрафы разнесены пропорционально начислению.
         </p>
+        {!data.volumesFilled ? (
+          <p className="text-xs text-muted-foreground">
+            Колонка ₸/м³ пуста: не заполнены объёмы маршрутов.{" "}
+            <Link href="/fleet/admin/routes" className="underline hover:text-foreground">Заполнить объёмы</Link> — и себестоимость куба посчитается за прошлые периоды тоже.
+          </p>
+        ) : null}
       </section>
 
       {/* Рейтинг подрядчиков: круг топ-6 + нумерованный список */}
