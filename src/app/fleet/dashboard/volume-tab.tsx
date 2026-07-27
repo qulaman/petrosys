@@ -6,20 +6,13 @@ import {
   Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { axisTick, legendFormatter, tooltipStyle } from "@/components/dashboard/chart-theme";
 import { fmtInt } from "@/lib/format";
 import {
   FLOW_LABELS, addDays, completionWithTrucks, daysBetween, equipmentPlan, type Flow,
 } from "@/lib/forecast";
 import type { VolumeTabData } from "@/lib/data/forecast";
 
-const axisTick = { fill: "var(--muted-foreground)", fontSize: 12 };
-const tooltipStyle = {
-  background: "var(--popover)",
-  border: "1px solid var(--border)",
-  borderRadius: 8,
-  color: "var(--popover-foreground)",
-  fontSize: 12,
-};
 const FLOW_COLORS: Record<Flow, string> = {
   pit: "var(--chart-card)",
   local: "var(--chart-tanker)",
@@ -133,7 +126,7 @@ export function VolumeTab({ data: d }: { data: VolumeTabData }) {
             <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval="preserveStartEnd" minTickGap={24} />
             <YAxis tick={axisTick} tickLine={false} axisLine={false} width={52} tickFormatter={(v: number) => `${Math.round(v / 1000)}к`} />
             <Tooltip contentStyle={tooltipStyle} formatter={(v) => fmtInt(Number(v)) + " м³"} />
-            <Legend formatter={(v) => <span style={{ color: "var(--foreground)", fontSize: 12 }}>{v}</span>} />
+            <Legend formatter={legendFormatter} />
             <ReferenceLine y={s.target_volume_m3} stroke="var(--muted-foreground)" strokeDasharray="2 4" />
             <Line dataKey="fact" name="Факт" stroke="var(--chart-card)" strokeWidth={2} dot={false} />
             {s.target_date ? <Line dataKey="plan" name="План" stroke="var(--muted-foreground)" strokeWidth={2} strokeDasharray="6 4" dot={false} /> : null}
@@ -153,7 +146,7 @@ export function VolumeTab({ data: d }: { data: VolumeTabData }) {
             <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval="preserveStartEnd" minTickGap={16} />
             <YAxis tick={axisTick} tickLine={false} axisLine={false} width={52} tickFormatter={(v: number) => fmtInt(v)} />
             <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} formatter={(v) => fmtInt(Number(v)) + " м³"} />
-            <Legend formatter={(v) => <span style={{ color: "var(--foreground)", fontSize: 12 }}>{v}</span>} />
+            <Legend formatter={legendFormatter} />
             {(Object.keys(FLOW_COLORS) as Flow[]).map((f, i, arr) => (
               <Bar key={f} dataKey={f} name={FLOW_LABELS[f]} stackId="v" fill={FLOW_COLORS[f]}
                 stroke="var(--background)" strokeWidth={1}

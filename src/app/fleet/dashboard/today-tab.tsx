@@ -7,45 +7,16 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Delta } from "@/components/dashboard/delta";
+import { StatTile } from "@/components/dashboard/stat-tile";
 import { TIME_ZONE, fmtInt, fmtLiters, fmtMoney, fmtTime } from "@/lib/format";
 import { ANOMALY_LABELS } from "@/lib/anomalies";
 import { aqtobeDate } from "@/lib/tz";
 import { cn } from "@/lib/utils";
 import type { FeedEvent, TodayData } from "@/lib/data/dashboard";
 
-/** Δ ко вчера (к этому же часу): стрелка и знак; серым при нуле. */
-function Delta({ now, prev, fmt = fmtInt }: { now: number; prev: number; fmt?: (n: number) => string }) {
-  const diff = now - prev;
-  if (prev === 0 && now === 0) return null;
-  return (
-    <span
-      className={cn("text-xs tabular-nums", diff > 0 ? "text-success" : diff < 0 ? "text-destructive" : "text-muted-foreground")}
-      title="Сравнение со вчерашним днём до этого же часа"
-    >
-      {diff > 0 ? "▲" : diff < 0 ? "▼" : "•"} {diff > 0 ? "+" : ""}{fmt(diff)} ко вчера к этому часу
-    </span>
-  );
-}
-
-function StatTile({
-  label, value, sub, icon: Icon, href, delta,
-}: {
-  label: string; value: string; sub?: string; icon: React.ElementType;
-  href?: string; delta?: React.ReactNode;
-}) {
-  const body = (
-    <div className={cn("flex h-full flex-col gap-1 rounded-lg border p-4", href ? "transition-colors hover:bg-accent" : "")}>
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="size-4" />
-        <span className="text-xs">{label}</span>
-      </div>
-      <span className="text-2xl font-bold tabular-nums lg:text-3xl">{value}</span>
-      {delta}
-      {sub ? <span className="text-xs text-muted-foreground">{sub}</span> : null}
-    </div>
-  );
-  return href ? <Link href={href}>{body}</Link> : body;
-}
+/** База сравнения плиток «Сегодня» — вчерашний день до этого же часа. */
+const VS_YESTERDAY = { suffix: "ко вчера к этому часу", title: "Сравнение со вчерашним днём до этого же часа" };
 
 const KIND_LABEL: Record<FeedEvent["kind"], string> = {
   fuel: "Заправка",
@@ -247,16 +218,16 @@ export function TodayTab({ data }: { data: TodayData }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatTile label="Техника на линии" value={`${techOnline}/${data.techTotal}`} icon={Truck} sub="с записью сегодня" />
         <StatTile label="Рейсов сегодня" value={fmtInt(tripsToday)} icon={Truck}
-          href="/fleet/journals/trips?period=today" delta={<Delta now={tripsToday} prev={data.prev.trips} />} />
+          href="/fleet/journals/trips?period=today" delta={<Delta now={tripsToday} prev={data.prev.trips} {...VS_YESTERDAY} />} />
         <StatTile label="Часов записано" value={fmtInt(hoursToday)} icon={Timer}
-          href="/fleet/journals/shifts?period=today" delta={<Delta now={hoursToday} prev={data.prev.hours} />}
+          href="/fleet/journals/shifts?period=today" delta={<Delta now={hoursToday} prev={data.prev.hours} {...VS_YESTERDAY} />}
           sub="включая черновики журналов" />
         <StatTile label="Литров выдано" value={fmtInt(litersCard + litersTanker)} icon={Fuel}
           href="/fleet/journals/fuel?period=today"
-          delta={<Delta now={litersCard + litersTanker} prev={data.prev.liters} />}
+          delta={<Delta now={litersCard + litersTanker} prev={data.prev.liters} {...VS_YESTERDAY} />}
           sub={`карта ${fmtInt(litersCard)} · бензовоз ${fmtInt(litersTanker)}`} />
         <StatTile label="Начислено сегодня" value={fmtMoney(data.accruedToday)} icon={Coins}
-          delta={<Delta now={data.accruedToday} prev={data.prev.accrued} fmt={fmtMoney} />}
+          delta={<Delta now={data.accruedToday} prev={data.prev.accrued} fmt={fmtMoney} {...VS_YESTERDAY} />}
           sub="оценка по ставкам · включая черновики" />
       </div>
 

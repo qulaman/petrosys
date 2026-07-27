@@ -125,7 +125,15 @@ function present(
   }
 }
 
-export default async function AnomaliesPage() {
+export default async function AnomaliesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const rawType = Array.isArray(sp.type) ? sp.type[0] : sp.type;
+  // Только известные типы: чужая строка из URL не должна давать пустой экран без объяснения.
+  const initialType = rawType && rawType in ANOMALY_LABELS ? rawType : null;
   const [current, supabase] = await Promise.all([getCurrentProfile(), createClient()]);
   const orgId = current?.profile?.org_id ?? "";
 
@@ -191,7 +199,7 @@ export default async function AnomaliesPage() {
 
   return (
     <AppShell requiredRoles={["admin", "office"]} title="Центр аномалий">
-      <AnomaliesClient rows={rows} />
+      <AnomaliesClient rows={rows} initialType={initialType} />
     </AppShell>
   );
 }

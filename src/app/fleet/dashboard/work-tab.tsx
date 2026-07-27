@@ -1,321 +1,307 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
-  Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { Activity, ChevronDown, Package, Timer, Truck } from "lucide-react";
+import { Activity, AlertTriangle, Package, Timer, Truck } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SearchSelect } from "@/components/ui/search-select";
+import { Delta } from "@/components/dashboard/delta";
+import { HeatTable } from "@/components/dashboard/heat-table";
+import { Panel, Section } from "@/components/dashboard/section";
+import { StatTile } from "@/components/dashboard/stat-tile";
+import { axisTick, tooltipStyle } from "@/components/dashboard/chart-theme";
+import { usePersistedState } from "@/components/dashboard/use-persisted-state";
 import { fmtInt } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { HeatBucket, HeatRow, WorkTabData } from "@/lib/data/dashboard";
+import type { HeatRow, WorkTabData } from "@/lib/data/dashboard";
 
-const axisTick = { fill: "var(--muted-foreground)", fontSize: 12 };
-const tooltipStyle = {
-  background: "var(--popover)", border: "1px solid var(--border)",
-  borderRadius: 8, color: "var(--popover-foreground)", fontSize: 13,
-};
-
-const fmtVal = (n: number) => (Number.isInteger(n) ? fmtInt(n) : n.toFixed(1));
-
-function StatTile({
-  label, value, sub, icon: Icon,
-}: {
-  label: string; value: string; sub?: string; icon: React.ElementType;
-}) {
-  return (
-    <div className="flex flex-col gap-1 rounded-lg border p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="size-4" />
-        <span className="text-xs">{label}</span>
-      </div>
-      <span className="text-2xl font-bold tabular-nums">{value}</span>
-      {sub ? <span className="text-xs text-muted-foreground">{sub}</span> : null}
-    </div>
-  );
-}
+/** Первая корзина гистограммы: интервал быстрее физически возможного. */
+const SUSPICIOUS_BUCKET = "<15";
+/** Отстающими считаем тех, кто заметно ниже медианы, а не всю нижнюю половину. */
+const LAG_RATIO = 0.8;
 
 /** Активность (часы и рейсы раздельно) + интервалы рейсов + выработка самосвалов. */
 export function WorkTab({ data }: { data: WorkTabData }) {
   const singleDay = data.buckets.length === 1 && !data.weekly;
-  // Интервалы: 0 — все самосвалы, дальше по машинам.
-  const [intervalIdx, setIntervalIdx] = useState(0);
-  const intervalGroup = data.intervals[Math.min(intervalIdx, data.intervals.length - 1)] ?? data.intervals[0];
-  const colUnit = data.weekly ? "за неделю" : "за день";
   const s = data.summary;
-  const maxDayTrips = Math.max(1, ...data.tripsRows.map((r) => r.total));
+  const periodQ = `period=custom&from=${data.periodFrom}&to=${data.periodTo}`;
+
+  // Машина для гистограммы интервалов: 0 — все самосвалы, дальше по машинам.
+  const [intervalKey, setIntervalKey] = usePersistedState("iv", "");
+  const intervalIdx = Math.max(0, data.intervals.findIndex((g) => (g.reg ?? "") === intervalKey));
+  const intervalGroup = data.intervals[intervalIdx] ?? data.intervals[0];
+  const suspicious = intervalGroup?.buckets.find((b) => b.label === SUSPICIOUS_BUCKET)?.count ?? 0;
 
   return (
     <div className="flex flex-col gap-6">
       {/* Сводка периода */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Рейсов за период" value={fmtInt(s.tripsTotal)} icon={Truck} />
-        <StatTile label="Моточасов за период" value={fmtInt(s.hoursTotal)} icon={Timer} />
-        <StatTile label="Работало техники" value={`${s.worked}/${s.fleet}`} icon={Activity}
-          sub={s.idle > 0 ? `простаивало ${s.idle}` : "весь парк в работе"} />
-        <StatTile label="Перевезено грунта" value={s.m3Total != null ? `${fmtInt(s.m3Total)} м³` : "—"} icon={Package}
-          sub={s.m3Total != null ? "по объёмам маршрутов" : "объёмы маршрутов не заполнены"} />
+        <StatTile
+          label="Рейсов за период"
+          value={fmtInt(s.tripsTotal)}
+          icon={Truck}
+          href={`/fleet/journals/trips?${periodQ}`}
+          title="Открыть журнал рейсов за период"
+          delta={<Delta now={s.tripsTotal} prev={data.prev.trips} suffix="к прошлому периоду"
+            title="Сравнение с предыдущим периодом такой же длины" />}
+        />
+        <StatTile
+          label="Моточасов за период"
+          value={fmtInt(s.hoursTotal)}
+          icon={Timer}
+          href={`/fleet/journals/shifts?${periodQ}`}
+          title="Открыть табель за период"
+          delta={<Delta now={s.hoursTotal} prev={data.prev.hours} suffix="к прошлому периоду"
+            title="Сравнение с предыдущим периодом такой же длины" />}
+        />
+        <StatTile
+          label="Работало техники"
+          value={`${s.worked}/${s.fleet}`}
+          icon={Activity}
+          tone={s.idle > 0 ? "warning" : "success"}
+          sub={s.idle > 0 ? `простаивало ${s.idle} — кнопка «Простаивавшие» в картах ниже` : "весь парк в работе"}
+        />
+        <StatTile
+          label="Перевезено грунта"
+          value={s.m3Total != null ? `${fmtInt(s.m3Total)} м³` : "—"}
+          icon={Package}
+          sub={
+            s.m3Total != null ? (
+              "по объёмам маршрутов"
+            ) : (
+              <>
+                у маршрутов не заполнен объём —{" "}
+                <Link href="/fleet/admin/routes" className="underline hover:text-foreground">
+                  заполнить в справочнике
+                </Link>
+              </>
+            )
+          }
+        />
       </div>
 
       {/* Моточасы */}
-      <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-medium">
-          Моточасы <span className="text-muted-foreground">(часов {colUnit} · клик — в табель)</span>
-        </h3>
-        <HeatTable
-          buckets={data.buckets}
-          rows={data.hoursRows}
-          dayTotals={data.hoursDayTotals}
-          maxCell={data.maxHoursCell}
-          colorVar="var(--chart-card)"
-          unit="ч"
-          journalPath="/fleet/journals/shifts"
-          periodFrom={data.periodFrom}
-          periodTo={data.periodTo}
-          emptyText="Нет техники на моточасах с работой за период"
-        />
-        <IdleList regs={data.hoursIdleRegs} noun="единиц техники на моточасах" />
-      </section>
+      <Section
+        title="Моточасы"
+        hint={singleDay ? "(часов за день · клик — в табель)" : `(часов за ${data.weekly ? "неделю" : "день"} · клик — в табель)`}
+      >
+        {singleDay ? (
+          <DayBars
+            rows={data.hoursRows}
+            colorVar="var(--chart-card)"
+            journalPath="/fleet/journals/shifts"
+            periodQ={periodQ}
+            unit="ч"
+            emptyIcon={Timer}
+            emptyText="Часов за день нет"
+          />
+        ) : (
+          <HeatTable
+            buckets={data.buckets}
+            rows={data.hoursRows}
+            idle={data.hoursIdle}
+            colorVar="var(--chart-card)"
+            unit="ч"
+            journalPath="/fleet/journals/shifts"
+            periodFrom={data.periodFrom}
+            periodTo={data.periodTo}
+            emptyText="Нет техники на моточасах с работой за период"
+            weekly={data.weekly}
+            csvName="motochasy"
+            paramPrefix="h"
+            idleNoun="ед. техники"
+          />
+        )}
+      </Section>
 
       {/* Рейсы */}
-      <section className="flex flex-col gap-3">
-        <h3 className="text-sm font-medium">
-          Рейсы самосвалов{" "}
-          <span className="text-muted-foreground">
-            {singleDay ? "(за день · клик — в журнал рейсов)" : `(рейсов ${colUnit} · клик — в журнал рейсов)`}
-          </span>
-        </h3>
+      <Section
+        title="Рейсы самосвалов"
+        hint={singleDay ? "(за день · клик — в журнал рейсов)" : `(рейсов за ${data.weekly ? "неделю" : "день"} · клик — в журнал рейсов)`}
+      >
         {singleDay ? (
-          <div className="flex flex-col gap-2 rounded-lg border p-4">
-            {data.tripsRows.map((r) => (
-              <Link
-                key={r.vehicle_id}
-                href={`/fleet/journals/trips?vehicle=${r.vehicle_id}&period=custom&from=${data.periodFrom}&to=${data.periodTo}`}
-                className="flex items-center gap-3 rounded px-1 hover:bg-accent"
-                title={`${r.reg}: ${r.total} рейсов — открыть журнал`}
-              >
-                <span className="w-24 shrink-0 text-sm font-medium">{r.reg}</span>
-                <div className="h-3 flex-1 rounded bg-muted">
-                  <div className="h-full rounded" style={{ width: `${(r.total / maxDayTrips) * 100}%`, background: "var(--chart-tanker)" }} />
-                </div>
-                <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums">{fmtInt(r.total)}</span>
-              </Link>
-            ))}
-            {data.tripsRows.length === 0 ? (
-              <EmptyState icon={Truck} title="Рейсов за день нет" className="border-0 p-4" />
-            ) : null}
-          </div>
+          <DayBars
+            rows={data.tripsRows}
+            colorVar="var(--chart-tanker)"
+            journalPath="/fleet/journals/trips"
+            periodQ={periodQ}
+            unit="рейсов"
+            emptyIcon={Truck}
+            emptyText="Рейсов за день нет"
+          />
         ) : (
           <HeatTable
             buckets={data.buckets}
             rows={data.tripsRows}
-            dayTotals={data.tripsDayTotals}
-            maxCell={data.maxTripsCell}
+            idle={data.tripsIdle}
             colorVar="var(--chart-tanker)"
             unit="рейсов"
             journalPath="/fleet/journals/trips"
             periodFrom={data.periodFrom}
             periodTo={data.periodTo}
             emptyText="Нет самосвалов с рейсами за период"
+            weekly={data.weekly}
+            csvName="reisy"
+            paramPrefix="t"
+            idleNoun="самосвалов"
           />
         )}
-        <IdleList regs={data.tripsIdleRegs} noun="самосвалов" />
-      </section>
+      </Section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Гистограмма интервалов */}
-        <section className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">
-              Интервалы между рейсами, мин{" "}
-              <span className="text-muted-foreground">
-                {intervalGroup?.median != null ? `· медиана ${intervalGroup.median} мин` : ""}
-              </span>
-            </h3>
-            {data.intervals.length > 1 ? (
-              <select
-                value={intervalIdx}
-                onChange={(e) => setIntervalIdx(Number(e.target.value))}
-                className="rounded-md border bg-background px-2 py-1 text-xs"
-                aria-label="Машина для гистограммы интервалов"
-              >
-                {data.intervals.map((g, i) => (
-                  <option key={g.reg ?? "all"} value={i}>
-                    {g.reg ?? "Все самосвалы"}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-          </div>
-          <div className="h-56 rounded-lg border p-2">
+        <Section
+          title="Интервалы между рейсами, мин"
+          hint={intervalGroup?.median != null ? `· медиана ${intervalGroup.median} мин` : undefined}
+          description="Столбец «<15» — ходки быстрее физически возможного: рейс мог быть отмечен дважды или накручен."
+          actions={
+            data.intervals.length > 1 ? (
+              <SearchSelect
+                value={intervalKey}
+                onChange={setIntervalKey}
+                options={data.intervals.filter((g) => g.reg).map((g) => ({ value: g.reg!, label: g.reg! }))}
+                emptyLabel="Все самосвалы"
+                placeholder="Госномер"
+                className="w-44"
+              />
+            ) : null
+          }
+        >
+          <Panel className="h-56 p-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={intervalGroup?.buckets ?? []} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <BarChart data={intervalGroup?.buckets ?? []} margin={{ top: 8, right: 8, bottom: 16, left: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
                 <YAxis tick={axisTick} tickLine={false} axisLine={false} width={32} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} />
-                <Bar dataKey="count" name="Ходок" fill="var(--chart-card)" radius={[4, 4, 0, 0]} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }}
+                  formatter={(v) => fmtInt(Number(v))} />
+                <Bar dataKey="count" name="Интервалов" radius={[4, 4, 0, 0]}>
+                  {(intervalGroup?.buckets ?? []).map((b) => (
+                    // Подозрительная корзина — предупреждающим цветом, остальные нейтральны.
+                    <Cell key={b.label} fill={b.label === SUSPICIOUS_BUCKET ? "var(--chart-over)" : "var(--chart-card)"} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Подозрительно короткие интервалы видны как левый столбец («&lt;15» — быстрее физически возможного).
-          </p>
-        </section>
+          </Panel>
+          {suspicious > 0 ? (
+            <Link
+              href="/fleet/dashboard/anomalies?type=short_trip_interval"
+              className="flex w-fit items-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-medium text-warning hover:bg-warning/20"
+            >
+              <AlertTriangle className="size-3.5" />
+              Подозрительных интервалов: {fmtInt(suspicious)} — разобрать в центре аномалий
+            </Link>
+          ) : null}
+        </Section>
 
         {/* Выработка самосвалов */}
-        <section className="flex flex-col gap-2">
-          <h3 className="text-sm font-medium">
-            Выработка самосвалов, рейсов/день{" "}
-            <span className="text-muted-foreground">
-              {data.productivityMedian != null ? `· медиана парка ${data.productivityMedian}` : ""}
-            </span>
-          </h3>
-          <div className="h-56 rounded-lg border p-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.productivity} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis dataKey="reg" tick={axisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
-                <YAxis tick={axisTick} tickLine={false} axisLine={false} width={32} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} />
-                {data.productivityMedian != null ? (
-                  <ReferenceLine y={data.productivityMedian} stroke="var(--foreground)" strokeDasharray="4 4" />
-                ) : null}
-                <Bar dataKey="avgPerDay" name="Рейсов/день" fill="var(--chart-tanker)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <p className="text-xs text-muted-foreground">Пунктир — медиана парка: отстающие и лидеры видны сразу.</p>
-        </section>
+        <Productivity data={data} />
       </div>
     </div>
   );
 }
 
-/** Раскрываемый список простаивавшей техники — сигнал, а не пустые строки в таблице. */
-function IdleList({ regs, noun }: { regs: string[]; noun: string }) {
-  const [open, setOpen] = useState(false);
-  if (regs.length === 0) return null;
-  return (
-    <div className="text-sm">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
-      >
-        <ChevronDown className={cn("size-4 transition-transform", open ? "rotate-180" : "")} />
-        Не работали за период: {regs.length} {noun}
-      </button>
-      {open ? <p className="mt-1 text-xs text-muted-foreground">{regs.join(", ")}</p> : null}
-    </div>
-  );
-}
-
-function HeatTable({
-  buckets,
-  rows,
-  dayTotals,
-  maxCell,
-  colorVar,
-  unit,
-  journalPath,
-  periodFrom,
-  periodTo,
-  emptyText,
+/**
+ * Однодневный период: 31 колонки нет, показывать одноколоночную карту незачем —
+ * обе секции рисуются горизонтальными барами.
+ */
+function DayBars({
+  rows, colorVar, journalPath, periodQ, unit, emptyIcon, emptyText,
 }: {
-  buckets: HeatBucket[];
   rows: HeatRow[];
-  dayTotals: number[];
-  maxCell: number;
   colorVar: string;
-  unit: string;
   journalPath: string;
-  periodFrom: string;
-  periodTo: string;
+  periodQ: string;
+  unit: string;
+  emptyIcon: React.ElementType;
   emptyText: string;
 }) {
-  const cellBg = (v: number) =>
-    v > 0 ? `color-mix(in srgb, ${colorVar} ${Math.round((v / maxCell) * 85) + 15}%, transparent)` : "transparent";
+  const max = Math.max(1, ...rows.map((r) => r.total));
+  if (rows.length === 0) {
+    return (
+      <Panel padded={false}>
+        <EmptyState icon={emptyIcon} title={emptyText} className="border-0 p-6" />
+      </Panel>
+    );
+  }
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="max-h-[70vh] overflow-auto rounded-lg border">
-        <table className="border-collapse text-xs">
-          <thead>
-            <tr>
-              <th className="sticky left-0 top-0 z-20 bg-background px-2 py-1 text-left">Машина</th>
-              {buckets.map((b) => (
-                <th key={b.from} className="sticky top-0 z-10 bg-background px-1 py-1 font-normal text-muted-foreground">{b.label}</th>
-              ))}
-              <th className="sticky top-0 z-10 bg-background px-2 py-1 text-right">Итого</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.vehicle_id}>
-                <td className="sticky left-0 z-10 whitespace-nowrap bg-background px-2 py-1 font-medium">
-                  <Link
-                    href={`${journalPath}?vehicle=${r.vehicle_id}&period=custom&from=${periodFrom}&to=${periodTo}`}
-                    className="hover:underline"
-                    title={`${r.reg}: открыть журнал за период`}
-                  >
-                    {r.reg}
-                  </Link>
-                </td>
-                {r.cells.map((v, i) => (
-                  <td
-                    key={i}
-                    className="h-7 w-8 p-0 text-center tabular-nums"
-                    style={{
-                      background: cellBg(v),
-                      color: v / maxCell > 0.6 ? "#fff" : "var(--foreground)",
-                    }}
-                  >
-                    {v > 0 ? (
-                      <Link
-                        href={`${journalPath}?vehicle=${r.vehicle_id}&period=custom&from=${buckets[i].from}&to=${buckets[i].to}`}
-                        className="flex h-full w-full items-center justify-center"
-                        title={`${r.reg} · ${buckets[i].label}: ${fmtVal(v)} ${unit}`}
-                      >
-                        {fmtVal(v)}
-                      </Link>
-                    ) : (
-                      <span title={`${r.reg} · ${buckets[i].label}: нет записей`} className="flex h-full w-full items-center justify-center" />
-                    )}
-                  </td>
-                ))}
-                <td className="px-2 py-1 text-right font-semibold tabular-nums">{fmtVal(r.total)}</td>
-              </tr>
-            ))}
-            {rows.length === 0 ? (
-              <tr><td colSpan={buckets.length + 2}><EmptyState icon={Timer} title={emptyText} className="border-0 p-6" /></td></tr>
-            ) : null}
-          </tbody>
-          {rows.length > 0 ? (
-            <tfoot>
-              <tr className="border-t bg-muted/50 font-semibold">
-                <td className="sticky left-0 z-10 bg-muted px-2 py-1">Итого</td>
-                {dayTotals.map((v, i) => (
-                  <td key={i} className="px-1 py-1 text-center tabular-nums">{v > 0 ? fmtVal(v) : ""}</td>
-                ))}
-                <td className="px-2 py-1 text-right tabular-nums">
-                  {fmtVal(Math.round(dayTotals.reduce((a, b) => a + b, 0) * 10) / 10)}
-                </td>
-              </tr>
-            </tfoot>
-          ) : null}
-        </table>
-      </div>
-      {rows.length > 0 ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>0</span>
-          <span
-            className="h-2 w-24 rounded"
-            style={{ background: `linear-gradient(to right, color-mix(in srgb, ${colorVar} 15%, transparent), ${colorVar})` }}
-          />
-          <span>{fmtVal(maxCell)} {unit} — пустая ячейка: простой/нет записей</span>
-        </div>
-      ) : null}
-    </div>
+    <Panel className="flex max-h-[70vh] flex-col gap-2 overflow-auto">
+      {rows.map((r) => (
+        <Link
+          key={r.vehicle_id}
+          href={`${journalPath}?vehicle=${r.vehicle_id}&${periodQ}`}
+          className="flex items-center gap-3 rounded px-1 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          title={`${r.reg}: ${r.total} ${unit} — открыть журнал`}
+        >
+          <span className="w-24 shrink-0 truncate text-sm font-medium">{r.reg}</span>
+          <span className="h-3 flex-1 rounded bg-muted">
+            <span className="block h-full rounded" style={{ width: `${(r.total / max) * 100}%`, background: colorVar }} />
+          </span>
+          <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums">{r.total}</span>
+        </Link>
+      ))}
+    </Panel>
+  );
+}
+
+/**
+ * Выработка самосвалов горизонтальными строками: госномера на оси X
+ * вертикального графика схлопывались в нечитаемую кашу уже на паре десятков машин.
+ */
+function Productivity({ data }: { data: WorkTabData }) {
+  const med = data.productivityMedian;
+  const max = Math.max(1, ...data.productivity.map((p) => p.avgPerDay));
+  const lagging = med != null ? data.productivity.filter((p) => p.avgPerDay < med * LAG_RATIO).length : 0;
+
+  return (
+    <Section
+      title="Выработка самосвалов, рейсов/день"
+      hint={med != null ? `· медиана парка ${med}` : undefined}
+      description={
+        med != null
+          ? `Метка на дорожке — медиана парка. Отстающими подсвечены машины ниже ${Math.round(LAG_RATIO * 100)}% медианы${lagging > 0 ? `: ${lagging}` : ""}.`
+          : "Среднее число рейсов за день, когда машина работала."
+      }
+    >
+      {data.productivity.length === 0 ? (
+        <Panel padded={false}>
+          <EmptyState icon={Truck} title="Нет самосвалов с рейсами за период" className="border-0 p-6" />
+        </Panel>
+      ) : (
+        <Panel className="flex max-h-[22rem] flex-col gap-2.5 overflow-auto">
+          {data.productivity.map((p) => {
+            const lag = med != null && p.avgPerDay < med * LAG_RATIO;
+            const medPos = med != null ? Math.min((med / max) * 100, 100) : null;
+            return (
+              <Link
+                key={p.vehicle_id}
+                href={`/fleet/journals/trips?vehicle=${p.vehicle_id}&period=custom&from=${data.periodFrom}&to=${data.periodTo}`}
+                className="flex flex-col gap-1 rounded px-1 py-0.5 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                title={`${p.reg}: ${p.avgPerDay} рейсов/день — открыть журнал`}
+              >
+                <div className="flex items-baseline justify-between gap-2 text-sm">
+                  <span className="truncate font-medium">{p.reg}</span>
+                  <span className={cn("shrink-0 tabular-nums", lag ? "font-semibold text-warning" : "")}>
+                    {p.avgPerDay}
+                  </span>
+                </div>
+                <span className="relative block h-2.5 rounded bg-muted">
+                  <span
+                    className="absolute inset-y-0 left-0 rounded"
+                    style={{ width: `${(p.avgPerDay / max) * 100}%`, background: lag ? "var(--warning)" : "var(--chart-tanker)" }}
+                  />
+                  {medPos != null ? (
+                    <span className="absolute -top-0.5 h-3.5 w-0.5 bg-foreground/60" style={{ left: `${medPos}%` }} />
+                  ) : null}
+                </span>
+              </Link>
+            );
+          })}
+        </Panel>
+      )}
+    </Section>
   );
 }

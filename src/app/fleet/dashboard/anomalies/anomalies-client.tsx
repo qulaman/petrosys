@@ -67,10 +67,17 @@ const PAGE_SIZE = 50;
 
 const ddmmyyyy = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
 
-export function AnomaliesClient({ rows }: { rows: AnomalyRow[] }) {
+export function AnomaliesClient({
+  rows,
+  initialType = null,
+}: {
+  rows: AnomalyRow[];
+  /** Тип из ?type= — приход с дашборда сразу в нужную выборку. */
+  initialType?: string | null;
+}) {
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState("open");
-  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string | null>(initialType);
   const [vehicleFilter, setVehicleFilter] = useState("");
   // Граница периода считается в обработчике клика (Date.now в рендере запрещён).
   const [dateFilter, setDateFilter] = useState<{ key: string; minDate: string | null }>({ key: "all", minDate: null });

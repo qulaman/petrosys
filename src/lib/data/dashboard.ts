@@ -406,7 +406,9 @@ export interface HeatRow { vehicle_id: string; reg: string; cells: number[]; tot
 export interface IntervalBucket { label: string; count: number }
 /** Гистограмма интервалов: reg=null — все самосвалы разом. */
 export interface IntervalGroup { reg: string | null; buckets: IntervalBucket[]; median: number | null }
-export interface ProductivityRow { reg: string; avgPerDay: number }
+export interface ProductivityRow { vehicle_id: string; reg: string; avgPerDay: number }
+/** Машина без единой записи за период — показывается в карте по требованию. */
+export interface IdleVehicle { vehicle_id: string; reg: string }
 export interface WorkSummary {
   tripsTotal: number;
   hoursTotal: number;
@@ -416,22 +418,24 @@ export interface WorkSummary {
   /** Перевезено м³ (объёмы из маршрутов); null — объёмы не заполнены. */
   m3Total: number | null;
 }
+/** Те же показатели за предыдущий период такой же длины — база сравнения плиток. */
+export interface WorkPrev {
+  trips: number;
+  hours: number;
+}
 export interface WorkTabData {
   buckets: HeatBucket[];
   weekly: boolean;
   periodFrom: string;
   periodTo: string;
   summary: WorkSummary;
+  prev: WorkPrev;
   /** Техника на моточасах, работавшая за период (сортировка по итогу). */
   hoursRows: HeatRow[];
-  hoursIdleRegs: string[];
-  hoursDayTotals: number[];
-  maxHoursCell: number;
+  hoursIdle: IdleVehicle[];
   /** Самосвалы, работавшие за период (сортировка по итогу). */
   tripsRows: HeatRow[];
-  tripsIdleRegs: string[];
-  tripsDayTotals: number[];
-  maxTripsCell: number;
+  tripsIdle: IdleVehicle[];
   /** Интервалы между рейсами: общая группа + по каждой машине. */
   intervals: IntervalGroup[];
   /** Выработка самосвалов: рейсов в день против медианы парка. */
@@ -459,14 +463,33 @@ function toIntervalGroup(reg: string | null, intervals: number[]): IntervalGroup
   };
 }
 
+/** Предыдущий период такой же длины, вплотную к текущему. */
+function previousWindow(fromDate: string, toDate: string) {
+  const len = eachDay(fromDate, toDate).length;
+  const shift = (d: string, n: number) =>
+    new Date(new Date(`${d}T00:00:00Z`).getTime() + n * 864e5).toISOString().slice(0, 10);
+  const prevTo = shift(fromDate, -1);
+  return { prevFrom: shift(prevTo, -(len - 1)), prevTo };
+}
+
 export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabData> {
   const supabase = await createClient();
-  const [veh, trips, shifts, routesRes] = await Promise.all([
+  const { prevFrom, prevTo } = previousWindow(period.fromDate, period.toDate);
+  // База сравнения — только два заголовочных числа: рейсы считаем на сервере
+  // (head: true — строки не едут), часы тянем одной колонкой.
+  const [veh, trips, shifts, routesRes, prevTripsRes, prevShiftsRes] = await Promise.all([
     supabase.from("vehicles").select("id, reg_number, accounting_type").eq("is_active", true).order("reg_number"),
     fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at, route_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
     fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours, shift_date").gte("shift_date", period.fromDate).lte("shift_date", period.toDate).order("id").range(f, t)),
     supabase.from("routes").select("id, volume_m3"),
+    supabase.from("trip_records").select("id", { count: "exact", head: true })
+      .gte("created_at", `${prevFrom}T00:00:00+05:00`).lt("created_at", `${period.fromDate}T00:00:00+05:00`),
+    fetchAll((f, t) => supabase.from("shift_records").select("hours").gte("shift_date", prevFrom).lte("shift_date", prevTo).order("id").range(f, t)),
   ]);
+  const prev: WorkPrev = {
+    trips: prevTripsRes.count ?? 0,
+    hours: Math.round(prevShiftsRes.reduce((s, r) => s + Number(r.hours), 0) * 10) / 10,
+  };
 
   const allDays = eachDay(period.fromDate, period.toDate);
   // > 60 дней — по дням нечитаемо и тяжело: агрегируем колонки в недели.
@@ -493,32 +516,28 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
 
   // Часы и рейсы — раздельно: своя таблица и своя шкала подсветки.
   // Полностью пустые строки — в отдельный список простоя, работавшие — по итогу.
-  let maxHoursCell = 0;
-  let maxTripsCell = 0;
+  // Ступени заливки и итоги по колонкам считает сама карта: она умеет фильтровать
+  // строки, и подвал должен сходиться с тем, что осталось на экране.
   const hoursRows: HeatRow[] = [];
   const tripsRows: HeatRow[] = [];
-  const hoursIdleRegs: string[] = [];
-  const tripsIdleRegs: string[] = [];
+  const hoursIdle: IdleVehicle[] = [];
+  const tripsIdle: IdleVehicle[] = [];
   for (const v of veh.data ?? []) {
     const isTrips = v.accounting_type === "trips";
     const src = isTrips ? tripCount : hoursSum;
     const cells = dayGroups.map((g) => {
       const val = g.days.reduce((s, d) => s + (src.get(`${v.id}|${d}`) ?? 0), 0);
-      if (isTrips) { if (val > maxTripsCell) maxTripsCell = val; }
-      else if (val > maxHoursCell) maxHoursCell = val;
       return Math.round(val * 10) / 10;
     });
     const total = Math.round(cells.reduce((s, n) => s + n, 0) * 10) / 10;
     if (total <= 0) {
-      (isTrips ? tripsIdleRegs : hoursIdleRegs).push(v.reg_number);
+      (isTrips ? tripsIdle : hoursIdle).push({ vehicle_id: v.id, reg: v.reg_number });
       continue;
     }
     (isTrips ? tripsRows : hoursRows).push({ vehicle_id: v.id, reg: v.reg_number, cells, total });
   }
   hoursRows.sort((a, b) => b.total - a.total);
   tripsRows.sort((a, b) => b.total - a.total);
-  const dayTotals = (rows: HeatRow[]) =>
-    buckets.map((_, i) => Math.round(rows.reduce((s, r) => s + r.cells[i], 0) * 10) / 10);
 
   // Сводка: рейсы, часы, занятость парка, кубометры (мертво до заполнения маршрутов).
   const routeVolume = new Map((routesRes.data ?? []).map((r) => [r.id, r.volume_m3 == null ? null : Number(r.volume_m3)]));
@@ -569,7 +588,7 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
     .map((v) => {
       const perDay = allDays.map((d) => tripCount.get(`${v.id}|${d}`) ?? 0).filter((n) => n > 0);
       const avg = perDay.length ? Math.round((perDay.reduce((s, n) => s + n, 0) / perDay.length) * 10) / 10 : 0;
-      return { reg: v.reg_number, avgPerDay: avg };
+      return { vehicle_id: v.id, reg: v.reg_number, avgPerDay: avg };
     })
     .filter((p) => p.avgPerDay > 0)
     .sort((a, b) => b.avgPerDay - a.avgPerDay);
@@ -580,14 +599,11 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
     periodFrom: period.fromDate,
     periodTo: period.toDate,
     summary,
+    prev,
     hoursRows,
-    hoursIdleRegs,
-    hoursDayTotals: dayTotals(hoursRows),
-    maxHoursCell: Math.max(1, maxHoursCell),
+    hoursIdle,
     tripsRows,
-    tripsIdleRegs,
-    tripsDayTotals: dayTotals(tripsRows),
-    maxTripsCell: Math.max(1, maxTripsCell),
+    tripsIdle,
     intervals,
     productivity,
     productivityMedian: median(productivity.map((p) => p.avgPerDay)),

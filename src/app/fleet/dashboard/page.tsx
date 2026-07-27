@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { createClient } from "@/lib/supabase/server";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { loadTodayData, loadFuelTabData, loadWorkTabData, loadMoneyTabData } from "@/lib/data/dashboard";
 import { loadVolumeTabData } from "@/lib/data/forecast";
 import { VolumeTab } from "./volume-tab";
@@ -37,7 +38,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           }
         />
         {tab !== "today" && tab !== "volume" ? <PeriodSelector extraParams={{ tab }} /> : null}
-        <Suspense key={`${tab}|${period.fromDate}|${period.toDate}`} fallback={<TabSkeleton />}>
+        <Suspense key={`${tab}|${period.fromDate}|${period.toDate}`} fallback={<TabSkeleton tab={tab} />}>
           <TabContent tab={tab} period={period} />
         </Suspense>
       </div>
@@ -60,13 +61,43 @@ async function TabContent({ tab, period }: { tab: string; period: ResolvedPeriod
   return <TodayTab data={await loadTodayData()} />;
 }
 
-function TabSkeleton() {
+/**
+ * Заглушка по форме конкретной вкладки: общая на всех давала заметный прыжок
+ * вёрстки, когда приезжало содержимое другой высоты и с другим числом плиток.
+ */
+function TabSkeleton({ tab }: { tab: string }) {
+  const tiles = tab === "today" || tab === "volume" || tab === "money" ? 5 : 4;
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" />
+    <div className="flex flex-col gap-6">
+      <div className={cn("grid grid-cols-2 gap-3", tiles === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
+        {Array.from({ length: tiles }, (_, i) => (
+          <Skeleton key={i} className="h-28 rounded-xl" />
+        ))}
       </div>
-      <Skeleton className="h-72 w-full" />
+      {tab === "work" ? (
+        <>
+          {/* Две тепловые карты и пара графиков в две колонки */}
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-9 w-full max-w-md" />
+            <Skeleton className="h-72 w-full rounded-xl" />
+          </div>
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-4 w-52" />
+            <Skeleton className="h-9 w-full max-w-md" />
+            <Skeleton className="h-72 w-full rounded-xl" />
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Skeleton className="h-56 rounded-xl" />
+            <Skeleton className="h-56 rounded-xl" />
+          </div>
+        </>
+      ) : (
+        <>
+          <Skeleton className="h-64 w-full rounded-xl" />
+          <Skeleton className="h-72 w-full rounded-xl" />
+        </>
+      )}
     </div>
   );
 }

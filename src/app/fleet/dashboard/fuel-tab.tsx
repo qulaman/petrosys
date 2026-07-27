@@ -15,38 +15,14 @@ import {
 import { AlertTriangle, ChevronDown, Droplet, Fuel, Gauge, Truck, Wallet } from "lucide-react";
 import { useNavProgress } from "@/components/nav-progress";
 import { EmptyState } from "@/components/ui/empty-state";
+import { StatTile } from "@/components/dashboard/stat-tile";
+import { axisTick, legendFormatter, tooltipStyle } from "@/components/dashboard/chart-theme";
 import { fmtInt, fmtLiters, fmtMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { DailyIssue, FuelTabData } from "@/lib/data/dashboard";
 
-const axisTick = { fill: "var(--muted-foreground)", fontSize: 12 };
-const tooltipStyle = {
-  background: "var(--popover)",
-  border: "1px solid var(--border)",
-  borderRadius: 8,
-  color: "var(--popover-foreground)",
-  fontSize: 13,
-};
-
 /** Позиция риск-линии нормы на шкале бара: норма = 70 % ширины, дальше — зона перерасхода. */
 const NORM_POS = 70;
-
-function StatTile({
-  label, value, sub, icon: Icon,
-}: {
-  label: string; value: string; sub?: string; icon: React.ElementType;
-}) {
-  return (
-    <div className="flex flex-col gap-1 rounded-lg border p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="size-4" />
-        <span className="text-xs">{label}</span>
-      </div>
-      <span className="text-2xl font-bold tabular-nums">{value}</span>
-      {sub ? <span className="text-xs text-muted-foreground">{sub}</span> : null}
-    </div>
-  );
-}
 
 export function FuelTab({ data }: { data: FuelTabData }) {
   const nav = useNavProgress();
@@ -89,7 +65,7 @@ export function FuelTab({ data }: { data: FuelTabData }) {
               <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval="preserveStartEnd" minTickGap={16} />
               <YAxis tick={axisTick} tickLine={false} axisLine={false} width={44} />
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} />
-              <Legend formatter={(v) => <span style={{ color: "var(--foreground)", fontSize: 12 }}>{v}</span>} />
+              <Legend formatter={legendFormatter} />
               <Bar dataKey="card" name="Карта" stackId="a" fill="var(--chart-card)" stroke="var(--background)" strokeWidth={1} />
               <Bar dataKey="tanker" name="Бензовоз" stackId="a" fill="var(--chart-tanker)" stroke="var(--background)" strokeWidth={1} radius={[4, 4, 0, 0]} />
             </BarChart>

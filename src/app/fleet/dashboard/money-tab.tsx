@@ -12,6 +12,8 @@ import { fmtMoney, fmtInt } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoHint } from "@/components/ui/info-hint";
+import { StatTile } from "@/components/dashboard/stat-tile";
+import { tooltipStyle } from "@/components/dashboard/chart-theme";
 import { downloadCsv } from "@/lib/journals/csv";
 import { vehicleTypeLabel } from "@/lib/domain";
 import { cn } from "@/lib/utils";
@@ -23,10 +25,6 @@ const PIE_COLORS = [
   "var(--chart-cat-4)", "var(--chart-cat-5)", "var(--chart-cat-6)",
 ];
 const OTHER_COLOR = "var(--muted-foreground)";
-const tooltipStyle = {
-  background: "var(--popover)", border: "1px solid var(--border)",
-  borderRadius: 8, color: "var(--popover-foreground)", fontSize: 13,
-};
 
 type SortKey = "number" | "contractor" | "accrual" | "fuelHold" | "penalty" | "net" | "forecast";
 
@@ -41,21 +39,6 @@ const SORT_COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
 ];
 
 const TYPE_LABEL = (t: string) => (t === "transportation" ? "перевозка" : "услуги техники");
-
-function StatTile({ label, value, sub, icon: Icon, accent }: {
-  label: string; value: string; sub?: string; icon: React.ElementType; accent?: boolean;
-}) {
-  return (
-    <div className={cn("flex flex-col gap-1 rounded-lg border p-4", accent ? "border-primary/40 bg-primary/5" : "")}>
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="size-4" />
-        <span className="text-xs">{label}</span>
-      </div>
-      <span className="text-2xl font-bold tabular-nums">{value}</span>
-      {sub ? <span className="text-xs text-muted-foreground">{sub}</span> : null}
-    </div>
-  );
-}
 
 type EffKey = "contractor" | "trips" | "costPerTrip" | "hours" | "costPerHour" | "tengePerM3";
 
@@ -229,7 +212,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
         <StatTile label="Начислено" value={fmtMoney(s.accrual)} icon={Coins} />
         <StatTile label="Удержано ГСМ" value={fmtMoney(s.fuelHold)} icon={Fuel} />
         <StatTile label="Штрафы" value={fmtMoney(s.penalty)} icon={Gavel} />
-        <StatTile label="К оплате" value={fmtMoney(s.net)} icon={Wallet} accent />
+        <StatTile label="К оплате" value={fmtMoney(s.net)} icon={Wallet} tone="primary" />
         <StatTile label="Прогноз АВР" value={fmtMoney(s.forecast)} icon={TrendingUp}
           sub={`прошло ${s.elapsedDays} из ${s.totalDays} дн.`} />
       </div>
