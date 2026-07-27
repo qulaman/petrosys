@@ -44,12 +44,15 @@ export function Panel({
   children,
   className,
   padded = true,
+  style,
 }: {
   children: React.ReactNode;
   className?: string;
   padded?: boolean;
+  /** Для высоты, зависящей от числа строк графика — классом не выразить. */
+  style?: React.CSSProperties;
 }) {
   return (
-    <div className={cn("rounded-xl border bg-card", padded && "p-4", className)}>{children}</div>
+    <div className={cn("rounded-xl border bg-card", padded && "p-4", className)} style={style}>{children}</div>
   );
 }

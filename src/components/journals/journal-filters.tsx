@@ -8,6 +8,7 @@ import { SearchSelect } from "@/components/ui/search-select";
 import { useNavProgress } from "@/components/nav-progress";
 import { PERIOD_LABELS, type PeriodPreset } from "@/lib/journals/period";
 import { FLOW_LABELS } from "@/lib/forecast";
+import { VEHICLE_TYPE_LABELS_PLURAL } from "@/lib/domain";
 import type { FilterOptions } from "@/lib/data/journals";
 
 const PRESETS: PeriodPreset[] = ["today", "7d", "15d", "month", "custom"];
@@ -19,9 +20,12 @@ const PRESETS: PeriodPreset[] = ["today", "7d", "15d", "month", "custom"];
 export function JournalFilters({
   options,
   shiftFlow = false,
+  vehicleType = false,
 }: {
   options?: FilterOptions;
   shiftFlow?: boolean;
+  /** Фильтр по виду техники — вход из графика «топливо по видам». */
+  vehicleType?: boolean;
 }) {
   const { pending, push } = useNavProgress();
   const pathname = usePathname();
@@ -32,6 +36,7 @@ export function JournalFilters({
   const to = sp.get("to") ?? "";
   const vehicleId = sp.get("vehicle") ?? "";
   const contractorId = sp.get("contractor") ?? "";
+  const type = sp.get("type") ?? "";
   const shift = sp.get("shift") ?? "";
   const flow = sp.get("flow") ?? "";
   const [clicked, setClicked] = useState<PeriodPreset | null>(null);
@@ -90,6 +95,19 @@ export function JournalFilters({
               ))}
             </select>
           </>
+        ) : null}
+        {vehicleType ? (
+          <select
+            aria-label="Вид техники"
+            value={type}
+            onChange={(e) => update({ type: e.target.value })}
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+          >
+            <option value="">Все виды техники</option>
+            {Object.entries(VEHICLE_TYPE_LABELS_PLURAL).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
         ) : null}
         {shiftFlow ? (
           <>

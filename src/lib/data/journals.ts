@@ -12,6 +12,8 @@ export interface JournalFilters {
   toDate: string;
   vehicleId?: string | null;
   contractorId?: string | null;
+  /** Вид техники (`vehicles.vehicle_type`) — вход из графика «топливо по видам». */
+  vehicleType?: string | null;
 }
 
 export interface FilterOptions {
@@ -49,6 +51,17 @@ function byContractor<T extends { vehicle_id: string }>(
 ): T[] {
   if (!contractorId) return rows;
   const ids = new Set(vehicles.filter((v) => v.contractor_id === contractorId).map((v) => v.id));
+  return rows.filter((r) => ids.has(r.vehicle_id));
+}
+
+/** Фильтр по виду техники — тем же приёмом, что и по подрядчику: в JS по словарю. */
+function byVehicleType<T extends { vehicle_id: string }>(
+  rows: T[],
+  vehicleType: string | null | undefined,
+  vehicles: { id: string; vehicle_type: string }[],
+): T[] {
+  if (!vehicleType) return rows;
+  const ids = new Set(vehicles.filter((v) => v.vehicle_type === vehicleType).map((v) => v.id));
   return rows.filter((r) => ids.has(r.vehicle_id));
 }
 
@@ -96,7 +109,7 @@ export async function loadFuelJournal(f: JournalFilters): Promise<FuelJournalRow
 
   // Словари и основная выборка — одной волной; фильтр подрядчика — в JS.
   const [veh, drv, cards, tankers, profiles, rows] = await Promise.all([
-    supabase.from("vehicles").select("id, reg_number, brand, contractor_id"),
+    supabase.from("vehicles").select("id, reg_number, brand, contractor_id, vehicle_type"),
     supabase.from("drivers").select("id, full_name"),
     supabase.from("fuel_cards").select("id, card_number"),
     supabase.from("tankers").select("id, name"),
@@ -108,7 +121,7 @@ export async function loadFuelJournal(f: JournalFilters): Promise<FuelJournalRow
   const cMap = new Map((cards.data ?? []).map((c) => [c.id, c.card_number]));
   const tMap = new Map((tankers.data ?? []).map((t) => [t.id, t.name]));
 
-  const data = byContractor(rows, f.contractorId, veh.data ?? []);
+  const data = byVehicleType(byContractor(rows, f.contractorId, veh.data ?? []), f.vehicleType, veh.data ?? []);
   return data.map((r) => {
     const v = vMap.get(r.vehicle_id);
     const src = r.source_type as "card" | "tanker";

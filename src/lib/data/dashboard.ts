@@ -262,6 +262,28 @@ export interface FuelSummary {
   /** Есть ли вообще нормативы у техники на моточасах (иначе блок норм мёртв). */
   normFilled: boolean;
 }
+/**
+ * Топливо в разрезе вида техники. Литры между видами сравнимы, УДЕЛЬНЫЙ расход —
+ * нет: у самосвалов знаменатель рейсы, у стационарной техники моточасы. Поэтому
+ * `perHour` и `perTrip` — две разные метрики, а не одна колонка «на единицу».
+ */
+export interface FuelTypeRow {
+  vehicleType: string; // "" — выдачи на машину, которой уже нет в справочнике
+  liters: number;
+  litersCard: number;
+  litersTanker: number;
+  share: number; // % от всех литров периода
+  vehicles: number; // машин этого вида заправлялось
+  hours: number;
+  trips: number;
+  perHour: number | null; // л/моточас (null — часов за период не было)
+  perTrip: number | null; // л/рейс
+  /** Норматив вида: средневзвешенный по моточасам, только машины с заполненной нормой. */
+  norm: number | null;
+  /** Доля моточасов вида, покрытых нормативом, % — ниже половины средняя норма врёт. */
+  normCoverage: number;
+  tenge: number; // удержания по договорным ценам ГСМ
+}
 export interface FuelTabData {
   daily: DailyIssue[];
   summary: FuelSummary;
@@ -269,6 +291,7 @@ export interface FuelTabData {
   /** Работавшая техника на моточасах без норматива — кандидаты на заполнение. */
   noNormRegs: string[];
   top: TopConsumer[];
+  byType: FuelTypeRow[];
 }
 
 function eachDay(fromDate: string, toDate: string): string[] {
@@ -286,10 +309,12 @@ const ddmm = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
 
 export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabData> {
   const supabase = await createClient();
-  const [veh, fuelRows, shiftRows, fuelPricesRes, attentionRes] = await Promise.all([
-    supabase.from("vehicles").select("id, reg_number, fuel_norm_per_hour, accounting_type, contract_id"),
+  const [veh, fuelRows, shiftRows, tripRows, openLineups, fuelPricesRes, attentionRes] = await Promise.all([
+    supabase.from("vehicles").select("id, reg_number, vehicle_type, fuel_norm_per_hour, accounting_type, contract_id"),
     fetchAll((f, t) => supabase.from("fuel_issues").select("created_at, liters, source_type, vehicle_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
     fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours").gte("shift_date", period.fromDate).lte("shift_date", period.toDate).order("id").range(f, t)),
+    fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, lineup_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
+    loadOpenLineupIds(supabase),
     supabase.from("contract_fuel_prices").select("contract_id, price_per_liter, valid_from"),
     supabase.from("anomalies").select("type, entity_refs").in("status", ["new", "reviewed"]).in("type", ["over_norm", "fuel_no_work"]),
   ]);
@@ -370,22 +395,86 @@ export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabDa
     (fuelPricesByContract.get(f.contract_id) ?? fuelPricesByContract.set(f.contract_id, []).get(f.contract_id))!
       .push({ price: Number(f.price_per_liter), valid_from: f.valid_from });
   }
+  // 5) разрез по виду техники: тем же проходом по выдачам копим литры и деньги.
+  //    Ведро "" — выдачи на машину, которой уже нет в справочнике: литры не
+  //    должны молча исчезнуть из суммы.
+  interface TypeBucket {
+    litersCard: number; litersTanker: number; tenge: number;
+    vehicles: Set<string>; hours: number; trips: number;
+    normHours: number; normWeighted: number; // для средневзвешенного норматива
+  }
+  const typeBuckets = new Map<string, TypeBucket>();
+  const typeBucket = (t: string) => {
+    let b = typeBuckets.get(t);
+    if (!b) {
+      b = { litersCard: 0, litersTanker: 0, tenge: 0, vehicles: new Set(), hours: 0, trips: 0, normHours: 0, normWeighted: 0 };
+      typeBuckets.set(t, b);
+    }
+    return b;
+  };
+
   let fuelHoldTenge = 0;
   let litersCard = 0;
   let litersTanker = 0;
   for (const r of fuelRows) {
-    if (r.source_type === "card") litersCard += Number(r.liters);
-    else litersTanker += Number(r.liters);
-    const contractId = vMap.get(r.vehicle_id)?.contract_id;
-    if (!contractId) continue;
-    const price = resolveFuelPrice(fuelPricesByContract.get(contractId) ?? [], aqtobeDate(r.created_at));
-    if (price != null) fuelHoldTenge += price * Number(r.liters);
+    const liters = Number(r.liters);
+    const v = vMap.get(r.vehicle_id);
+    const b = typeBucket(v?.vehicle_type ?? "");
+    b.vehicles.add(r.vehicle_id);
+    if (r.source_type === "card") { litersCard += liters; b.litersCard += liters; }
+    else { litersTanker += liters; b.litersTanker += liters; }
+    if (!v?.contract_id) continue;
+    const price = resolveFuelPrice(fuelPricesByContract.get(v.contract_id) ?? [], aqtobeDate(r.created_at));
+    if (price != null) {
+      fuelHoldTenge += price * liters;
+      b.tenge += price * liters;
+    }
   }
+  // Знаменатели удельного расхода. Рейсы из ОТКРЫТЫХ карточек смен — черновик
+  // мастера: попади они в знаменатель, л/рейс занизился бы задним числом.
+  for (const s of shiftRows) {
+    const v = vMap.get(s.vehicle_id);
+    if (!v) continue;
+    const hours = Number(s.hours);
+    const b = typeBucket(v.vehicle_type);
+    b.hours += hours;
+    if (v.fuel_norm_per_hour != null) {
+      b.normHours += hours;
+      b.normWeighted += Number(v.fuel_norm_per_hour) * hours;
+    }
+  }
+  for (const t of tripRows) {
+    const v = vMap.get(t.vehicle_id);
+    if (v && tripCounted(t, openLineups)) typeBucket(v.vehicle_type).trips += 1;
+  }
+
+  const totalLiters = litersCard + litersTanker;
+  const byType: FuelTypeRow[] = [...typeBuckets.entries()]
+    .map(([vehicleType, b]) => {
+      const liters = b.litersCard + b.litersTanker;
+      return {
+        vehicleType,
+        liters: Math.round(liters),
+        litersCard: Math.round(b.litersCard),
+        litersTanker: Math.round(b.litersTanker),
+        share: totalLiters > 0 ? Math.round((liters / totalLiters) * 100) : 0,
+        vehicles: b.vehicles.size,
+        hours: Math.round(b.hours * 10) / 10,
+        trips: b.trips,
+        perHour: b.hours > 0 ? Math.round((liters / b.hours) * 10) / 10 : null,
+        perTrip: b.trips > 0 ? Math.round((liters / b.trips) * 10) / 10 : null,
+        norm: b.normHours > 0 ? Math.round((b.normWeighted / b.normHours) * 10) / 10 : null,
+        normCoverage: b.hours > 0 ? Math.round((b.normHours / b.hours) * 100) : 0,
+        tenge: Math.round(b.tenge),
+      };
+    })
+    .filter((r) => r.liters > 0)
+    .sort((a, b) => b.liters - a.liters);
 
   return {
     daily,
     summary: {
-      totalLiters: litersCard + litersTanker,
+      totalLiters,
       litersCard,
       litersTanker,
       vehiclesFueled: litersByVeh.size,
@@ -396,6 +485,7 @@ export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabDa
     norm,
     noNormRegs,
     top,
+    byType,
   };
 }
 

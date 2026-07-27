@@ -20,6 +20,7 @@ export default async function FuelJournalPage({ searchParams }: { searchParams: 
     toDate: period.toDate,
     vehicleId: first(sp.vehicle) ?? null,
     contractorId: first(sp.contractor) ?? null,
+    vehicleType: first(sp.type) ?? null,
   };
   const [options, rows, current] = await Promise.all([
     loadFilterOptions(),
@@ -31,7 +32,7 @@ export default async function FuelJournalPage({ searchParams }: { searchParams: 
   return (
     <AppShell requiredRoles={["office", "admin"]} title="Журнал выдачи ГСМ">
       <div className="flex flex-col gap-4">
-        <JournalFilters options={options} />
+        <JournalFilters options={options} vehicleType />
         <FuelJournal rows={rows} isAdmin={isAdmin} drivers={options.drivers} vehicles={options.vehicles} />
       </div>
     </AppShell>

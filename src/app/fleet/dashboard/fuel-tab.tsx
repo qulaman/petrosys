@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Bar,
   BarChart,
@@ -16,16 +17,50 @@ import { AlertTriangle, ChevronDown, Droplet, Fuel, Gauge, Truck, Wallet } from 
 import { useNavProgress } from "@/components/nav-progress";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatTile } from "@/components/dashboard/stat-tile";
+import { Panel, Section } from "@/components/dashboard/section";
 import { axisTick, legendFormatter, tooltipStyle } from "@/components/dashboard/chart-theme";
 import { fmtInt, fmtLiters, fmtMoney } from "@/lib/format";
+import { vehicleTypeLabel } from "@/lib/domain";
 import { cn } from "@/lib/utils";
-import type { DailyIssue, FuelTabData } from "@/lib/data/dashboard";
+import type { DailyIssue, FuelTabData, FuelTypeRow } from "@/lib/data/dashboard";
 
 /** Позиция риск-линии нормы на шкале бара: норма = 70 % ширины, дальше — зона перерасхода. */
 const NORM_POS = 70;
 
+/** Ниже этого покрытия нормативом средняя норма вида недостоверна — не показываем. */
+const NORM_MIN_COVERAGE = 50;
+
+/**
+ * Удельный расход вида техники. Единица пишется в ячейке, а не в шапке: у
+ * самосвалов это л/рейс, у стационарной техники — л/моточас, и общей колонки
+ * «на единицу работы» не существует. У вида со смешанным учётом заполнены обе.
+ */
+function SpecificUse({ row }: { row: FuelTypeRow }) {
+  const parts: React.ReactNode[] = [];
+  if (row.perTrip != null) parts.push(<span key="t">{row.perTrip} л/рейс</span>);
+  if (row.perHour != null) {
+    const over = row.norm != null && row.normCoverage >= NORM_MIN_COVERAGE
+      ? Math.round((row.perHour / row.norm - 1) * 100)
+      : null;
+    parts.push(
+      <span key="h">
+        {row.perHour} л/ч
+        {over != null ? (
+          <span className={cn("ml-1 text-xs", over > 0 ? "text-destructive" : "text-muted-foreground")}
+            title={`Средневзвешенная норма вида ${row.norm} л/ч, покрытие ${row.normCoverage}% моточасов`}>
+            {over > 0 ? `+${over}%` : `${over}%`}
+          </span>
+        ) : null}
+      </span>,
+    );
+  }
+  if (!parts.length) return <span className="text-muted-foreground">—</span>;
+  return <>{parts.map((p, i) => (i ? <span key={i}> · {p}</span> : p))}</>;
+}
+
 export function FuelTab({ data }: { data: FuelTabData }) {
   const nav = useNavProgress();
+  const sp = useSearchParams();
   const [overOnly, setOverOnly] = useState(false);
   const [noNormOpen, setNoNormOpen] = useState(false);
 
@@ -37,6 +72,25 @@ export function FuelTab({ data }: { data: FuelTabData }) {
   const openDay = (state: unknown) => {
     const d = (state as { activePayload?: { payload?: DailyIssue }[] } | null)?.activePayload?.[0]?.payload;
     if (d?.date) nav.push(`/fleet/journals/fuel?period=custom&from=${d.date}&to=${d.date}`);
+  };
+
+  // Разрез по видам: подписи для оси и переход в журнал с сохранением периода.
+  const typeRows = data.byType.map((r) => ({
+    ...r,
+    label: r.vehicleType ? vehicleTypeLabel(r.vehicleType) : "Без вида",
+  }));
+  const chartHeight = Math.max(180, typeRows.length * 44 + 56);
+  const journalQuery = (type: string) => {
+    const q = new URLSearchParams({ type });
+    for (const k of ["period", "from", "to"]) {
+      const v = sp.get(k);
+      if (v) q.set(k, v);
+    }
+    return q.toString();
+  };
+  const openType = (state: unknown) => {
+    const p = (state as { activePayload?: { payload?: { vehicleType?: string } }[] } | null)?.activePayload?.[0]?.payload;
+    if (p?.vehicleType) nav.push(`/fleet/journals/fuel?${journalQuery(p.vehicleType)}`);
   };
 
   return (
@@ -72,6 +126,70 @@ export function FuelTab({ data }: { data: FuelTabData }) {
           </ResponsiveContainer>
         </div>
       </section>
+
+      {/* Топливо по видам техники */}
+      <Section
+        title="Топливо по видам техники, л"
+        hint="· клик по полосе — журнал выдач этого вида"
+        description="Литры между видами сравнимы, удельный расход — нет: у самосвалов знаменатель рейсы, у остальной техники моточасы, поэтому единица подписана в каждой ячейке."
+      >
+        <Panel className="p-2" style={{ height: chartHeight }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={typeRows} layout="vertical" margin={{ top: 8, right: 16, bottom: 0, left: 0 }}
+              onClick={openType} className="cursor-pointer">
+              <CartesianGrid horizontal={false} stroke="var(--border)" />
+              <XAxis type="number" tick={axisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} tickFormatter={(v) => fmtInt(Number(v))} />
+              <YAxis type="category" dataKey="label" tick={axisTick} tickLine={false} axisLine={false} width={104} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} formatter={(v) => fmtLiters(Number(v))} />
+              <Legend formatter={legendFormatter} />
+              <Bar dataKey="litersCard" name="Карта" stackId="a" fill="var(--chart-card)" stroke="var(--background)" strokeWidth={1} />
+              <Bar dataKey="litersTanker" name="Бензовоз" stackId="a" fill="var(--chart-tanker)" stroke="var(--background)" strokeWidth={1} radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Panel>
+        <Panel padded={false} className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted text-left">
+              <tr>
+                <th className="px-3 py-2">Вид техники</th>
+                <th className="px-3 py-2 text-right">Литров</th>
+                <th className="px-3 py-2 text-right">Доля</th>
+                <th className="px-3 py-2 text-right">Машин</th>
+                <th className="whitespace-nowrap px-3 py-2 text-right">Удельный расход</th>
+                <th className="px-3 py-2 text-right">Удержания</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {typeRows.map((r) => (
+                <tr key={r.vehicleType || "none"} className="hover:bg-accent/40">
+                  <td className="px-3 py-2">
+                    {r.vehicleType ? (
+                      <Link href={`/fleet/journals/fuel?${journalQuery(r.vehicleType)}`} className="font-medium hover:underline"
+                        title="Открыть журнал выдач по этому виду техники">
+                        {r.label}
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-muted-foreground" title="Выдачи на машины, которых уже нет в справочнике">
+                        {r.label}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtLiters(r.liters)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.share}%</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{fmtInt(r.vehicles)}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                    <SpecificUse row={r} />
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{r.tenge > 0 ? fmtMoney(r.tenge) : <span className="text-muted-foreground">—</span>}</td>
+                </tr>
+              ))}
+              {typeRows.length === 0 ? (
+                <tr><td colSpan={6}><EmptyState icon={Droplet} title="Выдач за период нет" className="border-0 p-6" /></td></tr>
+              ) : null}
+            </tbody>
+          </table>
+        </Panel>
+      </Section>
 
       {/* Расход к нормативу */}
       <section className="flex flex-col gap-2">
