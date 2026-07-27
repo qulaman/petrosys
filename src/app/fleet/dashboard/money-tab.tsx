@@ -7,13 +7,15 @@ import {
   Area, AreaChart, CartesianGrid, Cell, Line, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { AlertTriangle, ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, ChevronDown, Coins, Fuel, Gavel, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowDown as ArrowDownIcon, ArrowUp as ArrowUpIcon, ChevronDown, Coins, Download, Fuel, Gavel, TrendingUp, Wallet } from "lucide-react";
 import { fmtMoney, fmtInt } from "@/lib/format";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InfoHint } from "@/components/ui/info-hint";
+import { downloadCsv } from "@/lib/journals/csv";
 import { vehicleTypeLabel } from "@/lib/domain";
 import { cn } from "@/lib/utils";
-import type { MoneyTabData } from "@/lib/data/dashboard";
+import type { EffectiveCostRow, MoneyTabData } from "@/lib/data/dashboard";
 
 // Категориальная палитра из темы (см. globals.css) — корректна в light/dark/sun.
 const PIE_COLORS = [
@@ -55,6 +57,36 @@ function StatTile({ label, value, sub, icon: Icon, accent }: {
   );
 }
 
+type EffKey = "contractor" | "trips" | "costPerTrip" | "hours" | "costPerHour" | "tengePerM3";
+
+const EFF_COLUMNS: { key: EffKey; label: string; numeric: boolean; hint: string }[] = [
+  { key: "contractor", label: "Подрядчик · договор", numeric: false, hint: "" },
+  { key: "trips", label: "Рейсов", numeric: true, hint: "Оплачено / всего за период. Если числа расходятся — часть рейсов без ставки в прайсе договора, они не оплачиваются и в стоимость рейса не входят." },
+  { key: "costPerTrip", label: "₸/рейс", numeric: true, hint: "Начислено за рейсы минус удержанный ГСМ, делённое на число ОПЛАЧЕННЫХ рейсов. Часовые начисления и штрафы сюда не входят." },
+  { key: "hours", label: "Часов", numeric: true, hint: "Оплачено / всего за период. Считаются только смены из закрытых журналов — черновики не оплачиваются." },
+  { key: "costPerHour", label: "₸/час", numeric: true, hint: "Начислено за моточасы минус удержанный ГСМ, делённое на число ОПЛАЧЕННЫХ часов. Рейсовые начисления и штрафы сюда не входят." },
+  { key: "tengePerM3", label: "₸/м³ грунта", numeric: true, hint: "" },
+];
+
+/** Медиана по парку — база сравнения; на выборке меньше 3 значений бессмысленна. */
+const MIN_FOR_MEDIAN = 3;
+
+function median(xs: number[]): number | null {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+}
+
+/** Отклонение от медианы своего вида техники: дешевле — зелёное, дороже — тревожное. */
+function Deviation({ value, med, sample }: { value: number | null; med: number | null; sample: number }) {
+  if (value == null || med == null || med <= 0 || sample < MIN_FOR_MEDIAN) return null;
+  const d = Math.round(((value - med) / med) * 100);
+  if (d === 0) return null;
+  const cls = d >= 30 ? "text-destructive" : d >= 15 ? "text-warning" : d <= -15 ? "text-success" : "text-muted-foreground";
+  return <span className={cn("ml-1 text-[11px] font-normal tabular-nums", cls)}>{d > 0 ? "+" : ""}{d}%</span>;
+}
+
 /** Количество как «оплачено / всего»: расхождение — это дыра в прайсе договора. */
 function QtyCell({ total, billed }: { total: number; billed: number }) {
   if (total <= 0) return <span className="text-muted-foreground">—</span>;
@@ -89,6 +121,7 @@ function MetricCell({ value, qty, contractId }: { value: number | null; qty: num
 export function MoneyTab({ data }: { data: MoneyTabData }) {
   const sp = useSearchParams();
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "net", desc: true });
+  const [effSort, setEffSort] = useState<{ key: EffKey; desc: boolean }>({ key: "contractor", desc: false });
   const [unbilledOpen, setUnbilledOpen] = useState(false);
 
   const settlementHref = (c: { id: string }) => {
@@ -128,6 +161,63 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
     if (rest.length) pie.push({ name: `Прочие (${rest.length})`, value: rest.reduce((sum, r) => sum + r.net, 0) });
     return { ranked, top, restCount: rest.length, pie };
   }, [data.contracts]);
+
+  // Эффективная стоимость: группы по виду техники, внутри — своя сортировка.
+  // Медиана считается ВНУТРИ вида: сравнивать экскаватор с катком нельзя.
+  const effGroups = useMemo(() => {
+    const byType = new Map<string, EffectiveCostRow[]>();
+    for (const r of data.effective) {
+      (byType.get(r.vehicleType) ?? byType.set(r.vehicleType, []).get(r.vehicleType))!.push(r);
+    }
+    const { key, desc } = effSort;
+    return [...byType.entries()]
+      .map(([vehicleType, group]) => {
+        const pick = (k: "costPerTrip" | "costPerHour" | "tengePerM3") =>
+          group.map((r) => r[k]).filter((n): n is number => n != null);
+        const rows = [...group].sort((a, b) => {
+          if (key === "contractor") {
+            const c = a.contractor.localeCompare(b.contractor, "ru") || a.number.localeCompare(b.number, "ru");
+            return desc ? -c : c;
+          }
+          const av = a[key];
+          const bv = b[key];
+          if (av == null || av === 0) return bv == null || bv === 0 ? 0 : 1; // пустые всегда снизу
+          if (bv == null || bv === 0) return -1;
+          return desc ? bv - av : av - bv;
+        });
+        return {
+          vehicleType,
+          rows,
+          med: {
+            costPerTrip: median(pick("costPerTrip")),
+            costPerHour: median(pick("costPerHour")),
+            tengePerM3: median(pick("tengePerM3")),
+          },
+          n: {
+            costPerTrip: pick("costPerTrip").length,
+            costPerHour: pick("costPerHour").length,
+            tengePerM3: pick("tengePerM3").length,
+          },
+        };
+      })
+      .sort((a, b) => vehicleTypeLabel(a.vehicleType).localeCompare(vehicleTypeLabel(b.vehicleType), "ru"));
+  }, [data.effective, effSort]);
+
+  const exportEffectiveCsv = () =>
+    downloadCsv(
+      "эффективная-стоимость.csv",
+      ["Подрядчик", "Договор", "Вид техники", "Рейсов оплачено", "Рейсов всего", "₸/рейс",
+        "Часов оплачено", "Часов всего", "₸/час", "м³ оплачено", "₸/м³"],
+      data.effective.map((r) => [
+        r.contractor, r.number, vehicleTypeLabel(r.vehicleType),
+        r.billedTrips, r.trips, r.costPerTrip ?? "",
+        r.billedHours, r.hours, r.costPerHour ?? "",
+        r.billedVolume, r.tengePerM3 ?? "",
+      ]),
+    );
+
+  const toggleEffSort = (key: EffKey) =>
+    setEffSort((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: key !== "contractor" }));
 
   const toggleSort = (key: SortKey) =>
     setSort((prev) => (prev.key === key ? { key, desc: !prev.desc } : { key, desc: SORT_COLUMNS.find((c) => c.key === key)!.numeric }));
@@ -293,12 +383,19 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
 
       {/* Эффективная стоимость */}
       <section className="flex flex-col gap-2">
-        <div className="flex flex-col gap-1">
-          <h3 className="text-sm font-medium">Эффективная стоимость</h3>
-          <p className="text-sm text-muted-foreground">
-            Во что фактически обходится рейс и моточас у каждого подрядчика после удержания ГСМ и штрафов.
-            Прямое сравнение подрядчиков между собой — база для пересмотра ставок.
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-sm font-medium">Эффективная стоимость</h3>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Во что фактически обходится рейс и моточас у каждого подрядчика после удержания ГСМ.
+              Строки сгруппированы по виду техники и сравниваются с медианой своей группы — база для пересмотра ставок.
+            </p>
+          </div>
+          {data.effective.length > 0 ? (
+            <Button variant="outline" size="sm" onClick={exportEffectiveCsv}>
+              <Download className="size-4" /> CSV
+            </Button>
+          ) : null}
         </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
@@ -306,59 +403,90 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
                 горизонтальном скролле не должно просвечивать содержимое. */}
             <thead className="bg-muted text-left">
               <tr>
-                <th className="sticky left-0 z-10 bg-muted px-3 py-2">Подрядчик · договор</th>
-                <th className="px-3 py-2">Вид техники</th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">
-                  Рейсов <InfoHint text="Оплачено / всего за период. Если числа расходятся — часть рейсов без ставки в прайсе договора, они не оплачиваются и в стоимость рейса не входят." />
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">
-                  ₸/рейс <InfoHint text="Начислено за рейсы минус доля удержаний (ГСМ и штрафы), делённое на число ОПЛАЧЕННЫХ рейсов. Часовые начисления сюда не входят." />
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">
-                  Часов <InfoHint text="Оплачено / всего за период. Считаются только смены из закрытых журналов — черновики не оплачиваются." />
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">
-                  ₸/час <InfoHint text="Начислено за моточасы минус доля удержаний (ГСМ и штрафы), делённое на число ОПЛАЧЕННЫХ часов. Рейсовые начисления сюда не входят." />
-                </th>
-                <th className="whitespace-nowrap px-3 py-2 text-right">
-                  ₸/м³ грунта <InfoHint text={data.volumesFilled
-                    ? "Рейсовая часть «к оплате», делённая на кубометры перевезённого грунта. Объём рейса берётся из маршрута."
-                    : "Метрика не считается: в справочнике маршрутов не заполнены объёмы (м³ за рейс). Заполните их — колонка оживёт без других правок."} />
-                </th>
+                {EFF_COLUMNS.map((col) => (
+                  <th
+                    key={col.key}
+                    className={cn(
+                      "whitespace-nowrap px-3 py-2",
+                      col.numeric && "text-right",
+                      col.key === "contractor" && "sticky left-0 z-10 bg-muted",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleEffSort(col.key)}
+                      className={cn("inline-flex items-center gap-1 hover:text-foreground", effSort.key === col.key ? "text-foreground" : "")}
+                      title="Сортировать внутри вида техники"
+                    >
+                      {col.label}
+                      {effSort.key === col.key ? (effSort.desc ? <ArrowDownIcon className="size-3" /> : <ArrowUpIcon className="size-3" />) : null}
+                    </button>
+                    {col.key === "tengePerM3" ? (
+                      <InfoHint text={data.volumesFilled
+                        ? "Рейсовая часть «к оплате», делённая на кубометры перевезённого грунта. Объём рейса берётся из маршрута."
+                        : "Метрика не считается: в справочнике маршрутов не заполнены объёмы (м³ за рейс). Заполните их — колонка оживёт без других правок."} />
+                    ) : col.hint ? (
+                      <InfoHint text={col.hint} />
+                    ) : null}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {data.effective.map((r) => (
-                <tr key={`${r.contractId}|${r.vehicleType}`} className="hover:bg-accent/40">
-                  <td className="sticky left-0 z-10 bg-background px-3 py-2">
-                    <Link href={settlementHref({ id: r.contractId })} className="hover:underline">
-                      {r.contractor} <span className="text-muted-foreground">· {r.number}</span>
-                    </Link>
+            {effGroups.map((g) => (
+              <tbody key={g.vehicleType} className="divide-y border-t">
+                <tr className="bg-muted/40">
+                  <td className="sticky left-0 z-10 bg-muted/40 px-3 py-1.5 font-medium" colSpan={2}>
+                    {vehicleTypeLabel(g.vehicleType)}
+                    <span className="ml-1.5 font-normal text-muted-foreground">· {g.rows.length} {g.rows.length === 1 ? "договор" : "договоров"}</span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">{vehicleTypeLabel(r.vehicleType)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums"><QtyCell total={r.trips} billed={r.billedTrips} /></td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">
-                    <MetricCell value={r.costPerTrip} qty={r.trips} contractId={r.contractId} />
+                  <td className="px-3 py-1.5 text-right text-xs text-muted-foreground tabular-nums">
+                    {g.n.costPerTrip >= MIN_FOR_MEDIAN ? `медиана ${fmtMoney(g.med.costPerTrip!)}` : null}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums"><QtyCell total={r.hours} billed={r.billedHours} /></td>
-                  <td className="px-3 py-2 text-right font-medium tabular-nums">
-                    <MetricCell value={r.costPerHour} qty={r.hours} contractId={r.contractId} />
+                  <td className="px-3 py-1.5" />
+                  <td className="px-3 py-1.5 text-right text-xs text-muted-foreground tabular-nums">
+                    {g.n.costPerHour >= MIN_FOR_MEDIAN ? `медиана ${fmtMoney(g.med.costPerHour!)}` : null}
                   </td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums">
-                    {r.tengePerM3 != null ? fmtMoney(r.tengePerM3) : <span className="font-normal text-muted-foreground">—</span>}
+                  <td className="px-3 py-1.5 text-right text-xs text-muted-foreground tabular-nums">
+                    {g.n.tengePerM3 >= MIN_FOR_MEDIAN ? `медиана ${fmtMoney(g.med.tengePerM3!)}` : null}
                   </td>
                 </tr>
-              ))}
-              {data.effective.length === 0 ? (
-                <tr><td colSpan={7}><EmptyState icon={Wallet} title="Нет работ за период" className="border-0 p-6" /></td></tr>
-              ) : null}
-            </tbody>
+                {g.rows.map((r) => (
+                  <tr key={`${r.contractId}|${r.vehicleType}`} className="hover:bg-accent/40">
+                    <td className="sticky left-0 z-10 bg-background px-3 py-2">
+                      <Link href={settlementHref({ id: r.contractId })} className="hover:underline">
+                        {r.contractor} <span className="text-muted-foreground">· {r.number}</span>
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums"><QtyCell total={r.trips} billed={r.billedTrips} /></td>
+                    <td className="px-3 py-2 text-right font-medium tabular-nums">
+                      <MetricCell value={r.costPerTrip} qty={r.trips} contractId={r.contractId} />
+                      <Deviation value={r.costPerTrip} med={g.med.costPerTrip} sample={g.n.costPerTrip} />
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums"><QtyCell total={r.hours} billed={r.billedHours} /></td>
+                    <td className="px-3 py-2 text-right font-medium tabular-nums">
+                      <MetricCell value={r.costPerHour} qty={r.hours} contractId={r.contractId} />
+                      <Deviation value={r.costPerHour} med={g.med.costPerHour} sample={g.n.costPerHour} />
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                      {r.tengePerM3 != null ? fmtMoney(r.tengePerM3) : <span className="font-normal text-muted-foreground">—</span>}
+                      <Deviation value={r.tengePerM3} med={g.med.tengePerM3} sample={g.n.tengePerM3} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            ))}
+            {effGroups.length === 0 ? (
+              <tbody>
+                <tr><td colSpan={6}><EmptyState icon={Wallet} title="Нет работ за период" className="border-0 p-6" /></td></tr>
+              </tbody>
+            ) : null}
           </table>
         </div>
         <p className="text-xs text-muted-foreground">
-          Строка — договор и вид техники: ₸/час экскаватора и катка несравнимы, поэтому они разведены.
           Количества показаны как «оплачено / всего» — в стоимость входит только тарифицированная работа.
-          Удержания ГСМ и штрафы разнесены пропорционально начислению.
+          Удержанный ГСМ разнесён между рейсовой и часовой частью пропорционально начислению.
+          Штрафы в эффективную стоимость не входят: это не себестоимость рейса — они учтены в таблице «к оплате» выше.
+          Процент рядом со ставкой — отклонение от медианы своего вида техники (показывается от {MIN_FOR_MEDIAN} договоров в группе).
         </p>
         {!data.volumesFilled ? (
           <p className="text-xs text-muted-foreground">

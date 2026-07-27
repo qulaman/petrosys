@@ -610,6 +610,7 @@ export interface ContractMoney {
  * Эффективная стоимость — строка на (договор × вид техники). Разводить виды
  * обязательно: ₸/час экскаватора и катка — разные величины, усреднять их по
  * договору и сравнивать подрядчиков по такому числу нельзя.
+ * База по ТЗ — ставка минус удержанный ГСМ; штрафы сюда не входят.
  */
 export interface EffectiveCostRow {
   contractId: string;
@@ -750,14 +751,13 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     hours: number; billedHours: number;
     volume: number; billedVolume: number;
     fuelHold: number; // только по машинам, чья работа тарифицирована
-    penalty: number;  // договорный, разносится после агрегации
   }
   const eff = new Map<string, EffBucket>();
   const effBucket = (contractId: string, vehicleType: string) => {
     const k = `${contractId}|${vehicleType}`;
     let b = eff.get(k);
     if (!b) {
-      b = { contractId, vehicleType, accrualTrips: 0, accrualHours: 0, trips: 0, billedTrips: 0, hours: 0, billedHours: 0, volume: 0, billedVolume: 0, fuelHold: 0, penalty: 0 };
+      b = { contractId, vehicleType, accrualTrips: 0, accrualHours: 0, trips: 0, billedTrips: 0, hours: 0, billedHours: 0, volume: 0, billedVolume: 0, fuelHold: 0 };
       eff.set(k, b);
     }
     return b;
@@ -837,17 +837,13 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
     bucket(v.contract_id).fuelHold += amount;
     if (accruedVehicles.has(v.id)) effBucket(v.contract_id, v.vehicle_type).fuelHold += amount;
   }
-  // Штраф договорный, к виду техники не привязан — разносим пропорционально начислению.
-  const effByContract = new Map<string, EffBucket[]>();
-  for (const b of eff.values()) {
-    (effByContract.get(b.contractId) ?? effByContract.set(b.contractId, []).get(b.contractId))!.push(b);
-  }
+  // Штрафы — только в договорные деньги «к оплате». В эффективную стоимость они
+  // НЕ входят: по ТЗ это «ставка минус удержанный ГСМ», и экономически штраф —
+  // не себестоимость рейса, а компенсация нарушения. Вдобавок штрафы не
+  // фильтруются по периоду (нет даты закрытия), и на коротком периоде один
+  // штраф делал подрядчика «самым дешёвым».
   for (const p of penaltiesRes.data ?? []) {
     bucket(p.contract_id).penalty += Number(p.amount);
-    const list = effByContract.get(p.contract_id) ?? [];
-    const total = list.reduce((s, b) => s + b.accrualTrips + b.accrualHours, 0);
-    if (total <= 0) continue;
-    for (const b of list) b.penalty += Number(p.amount) * ((b.accrualTrips + b.accrualHours) / total);
   }
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -873,14 +869,13 @@ export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTab
   });
   contracts.sort((a, b) => a.number.localeCompare(b.number, "ru"));
 
-  // Эффективная стоимость: удержания (ГСМ, штрафы) распределяются между рейсовой
-  // и часовой частью пропорционально начислению — каждая метрика делит СВОЮ часть.
+  // Эффективная стоимость: удержанный ГСМ распределяется между рейсовой и часовой
+  // частью пропорционально начислению — каждая метрика делит СВОЮ часть.
   const effective: EffectiveCostRow[] = [...eff.values()].map((b) => {
     const contract = contractById.get(b.contractId);
     const accrualSum = b.accrualTrips + b.accrualHours;
-    const holds = b.fuelHold + b.penalty;
-    const netTrips = accrualSum > 0 ? b.accrualTrips - holds * (b.accrualTrips / accrualSum) : 0;
-    const netHours = accrualSum > 0 ? b.accrualHours - holds * (b.accrualHours / accrualSum) : 0;
+    const netTrips = accrualSum > 0 ? b.accrualTrips - b.fuelHold * (b.accrualTrips / accrualSum) : 0;
+    const netHours = accrualSum > 0 ? b.accrualHours - b.fuelHold * (b.accrualHours / accrualSum) : 0;
     return {
       contractId: b.contractId,
       number: contract?.number ?? "—",
