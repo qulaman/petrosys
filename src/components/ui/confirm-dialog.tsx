@@ -10,6 +10,8 @@ export interface ConfirmOptions {
   title: string;
   /** Что именно произойдёт и почему это необратимо — одной-двумя фразами. */
   description?: string;
+  /** Отдельное предупреждение красным: последствие за пределами самой записи. */
+  warning?: string;
   confirmLabel?: string;
   cancelLabel?: string;
   /** Удаление и прочее разрушающее — красной кнопкой. */
@@ -54,6 +56,11 @@ export function useConfirm() {
         </DialogHeader>
         {opts?.description ? (
           <p className="text-sm text-muted-foreground">{opts.description}</p>
+        ) : null}
+        {opts?.warning ? (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 p-2.5 text-sm text-destructive">
+            {opts.warning}
+          </p>
         ) : null}
         <DialogFooter>
           <Button variant="outline" onClick={() => finish(false)}>

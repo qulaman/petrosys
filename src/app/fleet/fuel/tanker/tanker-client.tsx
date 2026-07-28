@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDownRight, ArrowUpRight, Fuel, Ruler, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ExternalLink, Fuel, Ruler, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +13,13 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { uploadReceipt } from "@/lib/storage/upload";
 import { fmtLiters, fmtDateTime } from "@/lib/format";
+import { aqtobeDate } from "@/lib/tz";
 import { OutboxList } from "@/components/field/outbox-list";
 import { useOutbox, type SubmitResult } from "@/lib/outbox/use-outbox";
 import { useConfirm } from "@/components/ui/confirm-dialog";
-import type { TankerScreenData } from "@/lib/data/tanker";
+import type { TankerEvent, TankerScreenData } from "@/lib/data/tanker";
 import { createMeasurement, createRefill } from "./actions";
-import { adminDeleteTankerEvent } from "@/app/fleet/journals/admin-actions";
+import { adminDeleteTankerEvent, fuelIssueDeleteInfo } from "@/app/fleet/journals/admin-actions";
 
 /** Операция бензовоза в очереди: приход (с фото чека) либо замер остатка. */
 type TankerOp =
@@ -139,6 +141,49 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
       toast.success(`Замер сохранён: ${fmtLiters(measured)}`);
       setDone(`Замер сохранён: ${fmtLiters(measured)}`);
       reset();
+    });
+  }
+
+  /**
+   * Удаление операции админом. У выдачи последствия шире цистерны — деньги по
+   * договору, подпись водителя, возможно уже выпущенный акт, — поэтому перед
+   * подтверждением дочитываем контекст с сервера.
+   */
+  async function deleteEvent(e: TankerEvent) {
+    const isIssue = e.kind === "issue";
+    let description = "Баланс бензовоза будет пересчитан. Действие необратимо.";
+    let warning: string | undefined;
+
+    if (isIssue) {
+      const info = await fuelIssueDeleteInfo(e.id);
+      if (!info.ok) { toast.error(info.error); return; }
+      const who = [e.reg, e.driver].filter(Boolean).join(" · ") || "машина не определена";
+      const files = [
+        info.info.hasSignature ? "подпись водителя" : null,
+        info.info.hasReceipt ? "фото чека" : null,
+      ].filter(Boolean).join(" и ");
+      description =
+        `Выдача ${fmtLiters(Math.abs(e.liters ?? 0))} — ${who}. `
+        + `Изменятся удержания ГСМ по договору, расход к нормативу и остаток бензовоза.`
+        + (files ? ` Безвозвратно удалится ${files}.` : "");
+      if (info.info.closingDocs.length) {
+        warning = `Период уже закрыт: ${info.info.closingDocs.join(", ")}. Выпущенный документ разойдётся с базой.`;
+      }
+    }
+
+    const ok = await confirm({
+      title: isIssue ? "Удалить выдачу топлива?" : "Удалить операцию?",
+      description,
+      warning,
+      confirmLabel: "Удалить",
+      destructive: true,
+    });
+    if (!ok) return;
+    start(async () => {
+      const res = await adminDeleteTankerEvent(e.kind, e.id);
+      if (!res.ok) { toast.error(res.error); return; }
+      toast.success("Операция удалена");
+      router.refresh();
     });
   }
 
@@ -296,26 +341,27 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
                     {e.kind === "measurement" &&
                       `Замер ${fmtLiters(e.measured)} (расчёт ${fmtLiters(e.calculated)})`}
                   </p>
-                  <p className="text-xs text-muted-foreground">{fmtDateTime(e.at)}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {fmtDateTime(e.at)}
+                    {e.kind === "issue" && (e.reg || e.driver)
+                      ? ` · ${[e.reg, e.driver].filter(Boolean).join(" · ")}`
+                      : ""}
+                  </p>
                 </div>
-                {isAdmin && e.kind !== "issue" ? (
+                {isAdmin && e.kind === "issue" ? (
+                  <Link
+                    // Дата — в поясе объекта: у выдачи после 19:00 UTC-дата на сутки раньше.
+                    href={`/fleet/journals/fuel?vehicle=${e.vehicleId ?? ""}&period=custom&from=${aqtobeDate(e.at)}&to=${aqtobeDate(e.at)}`}
+                    aria-label="Открыть в журнале ГСМ"
+                    title="Открыть в журнале ГСМ — там видны одометр, чек и подпись"
+                  >
+                    <ExternalLink className="size-4 text-muted-foreground" />
+                  </Link>
+                ) : null}
+                {isAdmin ? (
                   <button
                     aria-label="Удалить (админ)"
-                    onClick={async () => {
-                      const ok = await confirm({
-                        title: "Удалить операцию?",
-                        description: "Баланс бензовоза будет пересчитан. Действие необратимо.",
-                        confirmLabel: "Удалить",
-                        destructive: true,
-                      });
-                      if (!ok) return;
-                      start(async () => {
-                        const res = await adminDeleteTankerEvent(e.kind as "refill" | "measurement", e.id);
-                        if (!res.ok) { toast.error(res.error); return; }
-                        toast.success("Операция удалена");
-                        router.refresh();
-                      });
-                    }}
+                    onClick={() => deleteEvent(e)}
                   >
                     <Trash2 className="size-4 text-destructive" />
                   </button>

@@ -21,6 +21,10 @@ export interface TankerEvent {
   measured: number | null;
   calculated: number | null;
   note: string | null;
+  /** Только у выдач: кому налили. Без этого «Выдача 350 л» удалять вслепую. */
+  reg: string | null;
+  driver: string | null;
+  vehicleId: string | null;
 }
 
 export interface TankerScreenData {
@@ -38,14 +42,18 @@ export async function loadTankerData(): Promise<TankerScreenData> {
   // Балансы, справочник бензовозов и история — через admin (RLS занижает агрегаты).
   // Всё независимое — одной волной.
   const admin = createAdminClient();
-  const [cardsRes, tankersRes, balancesRes, refillsRes, issuesRes, measRes] = await Promise.all([
+  const [cardsRes, tankersRes, balancesRes, refillsRes, issuesRes, measRes, vehRes, drvRes] = await Promise.all([
     supabase.from("fuel_cards").select("id, card_number, operator").eq("is_active", true).order("card_number"),
     admin.from("tankers").select("id, name, capacity_liters").eq("org_id", orgId).eq("is_active", true).order("name"),
     admin.from("tanker_balances").select("tanker_id, calculated_liters, last_measured_liters, last_measured_at").eq("org_id", orgId),
     admin.from("tanker_refills").select("id, tanker_id, liters, created_at, source").eq("org_id", orgId).order("created_at", { ascending: false }).limit(200),
-    admin.from("fuel_issues").select("id, tanker_id, liters, created_at").eq("org_id", orgId).eq("source_type", "tanker").order("created_at", { ascending: false }).limit(200),
+    admin.from("fuel_issues").select("id, tanker_id, liters, created_at, vehicle_id, driver_id").eq("org_id", orgId).eq("source_type", "tanker").order("created_at", { ascending: false }).limit(200),
     admin.from("tanker_measurements").select("id, tanker_id, measured_liters, calculated_liters, note, created_at").eq("org_id", orgId).order("created_at", { ascending: false }).limit(200),
+    admin.from("vehicles").select("id, reg_number").eq("org_id", orgId),
+    admin.from("drivers").select("id, full_name").eq("org_id", orgId),
   ]);
+  const regById = new Map((vehRes.data ?? []).map((v) => [v.id, v.reg_number]));
+  const driverById = new Map((drvRes.data ?? []).map((d) => [d.id, d.full_name]));
 
   const balByTanker = new Map<string, { calculated_liters: number; last_measured_liters: number | null; last_measured_at: string | null }>();
   for (const b of balancesRes.data ?? []) {
@@ -73,14 +81,21 @@ export async function loadTankerData(): Promise<TankerScreenData> {
   const push = (e: TankerEvent & { tanker_id: string }) => {
     (eventsByTanker[e.tanker_id] ??= []).push(e);
   };
+  const blank = { reg: null, driver: null, vehicleId: null };
   for (const r of refillsRes.data ?? [])
-    push({ tanker_id: r.tanker_id, id: r.id, kind: "refill", at: r.created_at, liters: Number(r.liters), measured: null, calculated: null, note: r.source });
+    push({ tanker_id: r.tanker_id, id: r.id, kind: "refill", at: r.created_at, liters: Number(r.liters), measured: null, calculated: null, note: r.source, ...blank });
   for (const i of issuesRes.data ?? []) {
     if (!i.tanker_id) continue;
-    push({ tanker_id: i.tanker_id, id: i.id, kind: "issue", at: i.created_at, liters: -Number(i.liters), measured: null, calculated: null, note: null });
+    push({
+      tanker_id: i.tanker_id, id: i.id, kind: "issue", at: i.created_at,
+      liters: -Number(i.liters), measured: null, calculated: null, note: null,
+      reg: regById.get(i.vehicle_id) ?? null,
+      driver: driverById.get(i.driver_id) ?? null,
+      vehicleId: i.vehicle_id,
+    });
   }
   for (const m of measRes.data ?? [])
-    push({ tanker_id: m.tanker_id, id: m.id, kind: "measurement", at: m.created_at, liters: null, measured: Number(m.measured_liters), calculated: Number(m.calculated_liters), note: m.note });
+    push({ tanker_id: m.tanker_id, id: m.id, kind: "measurement", at: m.created_at, liters: null, measured: Number(m.measured_liters), calculated: Number(m.calculated_liters), note: m.note, ...blank });
 
   for (const k of Object.keys(eventsByTanker)) {
     eventsByTanker[k].sort((a, b) => (a.at < b.at ? 1 : -1));
