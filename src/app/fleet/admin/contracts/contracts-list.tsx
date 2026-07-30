@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GroupLabel } from "@/components/ui/group-label";
 import { VEHICLE_TYPE_LABELS, type VehicleType } from "@/lib/domain";
 import type { ContractListRow } from "@/lib/data/contracts-admin";
 import { createContractWithTerms } from "./actions";
@@ -113,19 +114,20 @@ export function ContractsList({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label>Контрагент *</Label>
-              <select value={form.contractor_id} onChange={(e) => setForm((s) => ({ ...s, contractor_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <Label htmlFor="c-contractor">Контрагент *</Label>
+              <select id="c-contractor" value={form.contractor_id} onChange={(e) => setForm((s) => ({ ...s, contractor_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
                 <option value="">—</option>
                 {contractors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Номер договора *</Label>
-              <Input value={form.number} onChange={(e) => setForm((s) => ({ ...s, number: e.target.value }))} placeholder="08/07-01-УОП-2026" />
+              <Label htmlFor="c-number">Номер договора *</Label>
+              <Input id="c-number" value={form.number} onChange={(e) => setForm((s) => ({ ...s, number: e.target.value }))} placeholder="08/07-01-УОП-2026" />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Тип</Label>
+              <Label htmlFor="c-type">Тип</Label>
               <select
+                id="c-type"
                 value={form.contract_type}
                 onChange={(e) => {
                   const v = e.target.value as typeof form.contract_type;
@@ -139,25 +141,25 @@ export function ContractsList({
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Расчётный период</Label>
-              <select value={form.billing_period} onChange={(e) => setForm((s) => ({ ...s, billing_period: e.target.value as typeof form.billing_period }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <Label htmlFor="c-period">Расчётный период</Label>
+              <select id="c-period" value={form.billing_period} onChange={(e) => setForm((s) => ({ ...s, billing_period: e.target.value as typeof form.billing_period }))} className="h-10 rounded-md border bg-background px-3 text-sm">
                 <option value="monthly">Месяц</option>
                 <option value="15days">15 дней</option>
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Действует с *</Label>
-              <Input type="date" value={form.valid_from} onChange={(e) => setForm((s) => ({ ...s, valid_from: e.target.value }))} />
+              <Label htmlFor="c-from">Действует с *</Label>
+              <Input id="c-from" type="date" value={form.valid_from} onChange={(e) => setForm((s) => ({ ...s, valid_from: e.target.value }))} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>по (необязательно)</Label>
-              <Input type="date" value={form.valid_to} onChange={(e) => setForm((s) => ({ ...s, valid_to: e.target.value }))} />
+              <Label htmlFor="c-to">по (необязательно)</Label>
+              <Input id="c-to" type="date" value={form.valid_to} onChange={(e) => setForm((s) => ({ ...s, valid_to: e.target.value }))} />
             </div>
           </div>
 
           {/* Ставки */}
-          <div className="flex flex-col gap-2">
-            <Label>Ставки (Приложение №1) *</Label>
+          <div className="flex flex-col gap-2" role="group" aria-labelledby="c-rates-label">
+            <GroupLabel id="c-rates-label">Ставки (Приложение №1) *</GroupLabel>
             {rates.map((r, i) => (
               <div key={i} className="grid grid-cols-[1fr_7rem_8rem_2.5rem] gap-2">
                 <select value={r.vehicle_type} onChange={(e) => patchRate(i, { vehicle_type: e.target.value })} className="h-9 rounded-md border bg-background px-2 text-sm">
@@ -182,12 +184,12 @@ export function ContractsList({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label>Цена ГСМ для удержания, ₸/л (необязательно)</Label>
-              <Input inputMode="decimal" value={form.fuel_price} onChange={(e) => setForm((s) => ({ ...s, fuel_price: e.target.value.replace(/[^\d.]/g, "") }))} />
+              <Label htmlFor="c-fuel-price">Цена ГСМ для удержания, ₸/л (необязательно)</Label>
+              <Input id="c-fuel-price" inputMode="decimal" value={form.fuel_price} onChange={(e) => setForm((s) => ({ ...s, fuel_price: e.target.value.replace(/[^\d.]/g, "") }))} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Шаблон договора (docx)</Label>
-              <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <Label htmlFor="c-template">Шаблон договора (docx)</Label>
+              <select id="c-template" value={templateId} onChange={(e) => setTemplateId(e.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm">
                 <option value="">Встроенная форма</option>
                 {fittingTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>

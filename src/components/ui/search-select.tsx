@@ -17,6 +17,7 @@ export interface SearchSelectOption {
  * (выбор машины, договора и т.п. в офисных/админ-формах).
  */
 export function SearchSelect({
+  id,
   value,
   onChange,
   options,
@@ -26,6 +27,8 @@ export function SearchSelect({
   className,
   triggerClassName,
 }: {
+  /** id кнопки-триггера — чтобы на неё указывал `<Label htmlFor>`. */
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   options: SearchSelectOption[];
@@ -68,6 +71,9 @@ export function SearchSelect({
     <div ref={ref} className={cn("relative", className)}>
       <button
         type="button"
+        id={id}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => { setOpen((o) => !o); setQ(""); }}
         className={cn(
           "flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-sm",
@@ -105,7 +111,11 @@ export function SearchSelect({
               );
             })}
             {filtered.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-muted-foreground">Ничего не найдено</p>
+              // Названный запрос вместо глухого «Ничего не найдено»: видно,
+              // по чему искали, и что достаточно поправить строку поиска.
+              <p className="px-2 py-3 text-sm text-muted-foreground">
+                Ничего не найдено по «{q.trim()}»
+              </p>
             ) : null}
           </div>
         </div>

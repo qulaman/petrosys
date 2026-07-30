@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Pencil, Plus, Search, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ru } from "@/lib/i18n/ru";
 import { fmtMoney } from "@/lib/format";
 import { vehicleTypeLabel } from "@/lib/domain";
 import { DOC_LABELS, type DocType, type RegistryData, type RegistryVehicle } from "@/lib/avr-registry-shared";
@@ -84,7 +86,20 @@ export function AvrRegistryClient({ data }: { data: RegistryData }) {
           </div>
         </section>
       ))}
-      {groups.length === 0 ? <p className="text-sm text-muted-foreground">Ничего не найдено.</p> : null}
+      {groups.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title={q.trim() ? `${ru.empty.notFound} по «${q.trim()}»` : ru.empty.notFound}
+          description="Проверьте название ИП или гос. номер машины."
+          action={
+            q ? (
+              <Button variant="outline" size="field" onClick={() => setQ("")}>
+                Сбросить поиск
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : null}
     </div>
   );
 }

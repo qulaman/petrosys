@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import SignaturePadLib from "signature_pad";
 import { Button } from "@/components/ui/button";
+import { FullscreenSheet, FullscreenSheetClose } from "@/components/field/fullscreen-sheet";
 
 /**
  * Полноэкранная подпись пальцем. Сверху крупно ФИО подписанта, снизу — крупные
@@ -98,13 +99,15 @@ export function SignaturePad({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background">
-      <div className="p-4 text-center">
-        <p className="text-lg font-semibold">{signerName}, распишитесь</p>
-      </div>
-
+    <FullscreenSheet title={`${signerName}, распишитесь`} onClose={onCancel}>
+      {/* Холст всегда белый с чёрным штрихом — независимо от темы: подпись
+          уходит в документы и должна выглядеть одинаково. */}
       <div className="mx-4 flex-1 overflow-hidden rounded-lg border bg-white">
-        <canvas ref={canvasRef} className="h-full w-full touch-none" />
+        <canvas
+          ref={canvasRef}
+          aria-label="Поле для подписи пальцем"
+          className="h-full w-full touch-none"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-3 p-4">
@@ -115,13 +118,16 @@ export function SignaturePad({
           Готово
         </Button>
       </div>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="min-h-11 pb-4 text-sm text-muted-foreground underline"
+      <FullscreenSheetClose
+        render={
+          <Button
+            variant="ghost"
+            className="mx-auto mb-4 min-h-11 text-sm font-normal text-muted-foreground underline"
+          />
+        }
       >
         Отмена
-      </button>
-    </div>
+      </FullscreenSheetClose>
+    </FullscreenSheet>
   );
 }

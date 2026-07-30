@@ -113,27 +113,27 @@ export function TemplatesClient({ rows }: { rows: TemplateRow[] }) {
       {/* Загрузка нового шаблона */}
       <section className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="flex flex-col gap-1.5">
-          <Label>Название *</Label>
-          <Input value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} placeholder="Договор перевозки (форма 2026)" />
+          <Label htmlFor="tpl-name">Название *</Label>
+          <Input id="tpl-name" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} placeholder="Договор перевозки (форма 2026)" />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>Тип документа</Label>
-          <select value={form.doc_type} onChange={(e) => setForm((s) => ({ ...s, doc_type: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+          <Label htmlFor="tpl-doc-type">Тип документа</Label>
+          <select id="tpl-doc-type" value={form.doc_type} onChange={(e) => setForm((s) => ({ ...s, doc_type: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
             {Object.entries(DOC_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>Тип договора</Label>
-          <select value={form.contract_type} onChange={(e) => setForm((s) => ({ ...s, contract_type: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+          <Label htmlFor="tpl-contract-type">Тип договора</Label>
+          <select id="tpl-contract-type" value={form.contract_type} onChange={(e) => setForm((s) => ({ ...s, contract_type: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
             <option value="">Любой</option>
             <option value="transportation">Перевозка</option>
             <option value="equipment">Услуги техники</option>
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>Файл .docx *</Label>
+          <Label htmlFor="tpl-file">Файл .docx *</Label>
           <div className="flex gap-2">
-            <input ref={uploadRef} type="file" accept=".docx" className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5" />
+            <input id="tpl-file" ref={uploadRef} type="file" accept=".docx" className="text-sm file:mr-2 file:rounded-md file:border file:bg-background file:px-3 file:py-1.5" />
             <Button onClick={submitUpload} loading={pending}><Upload className="size-4" /> Загрузить</Button>
           </div>
         </div>

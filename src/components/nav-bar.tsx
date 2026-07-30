@@ -99,12 +99,22 @@ export function NavBar({ items, variant }: { items: NavItem[]; variant: "top" | 
           <Link
             key={n.href}
             href={n.href}
+            aria-current={active(n) ? "page" : undefined}
             className={cn(
               "flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-medium",
               active(n) ? "text-primary" : "text-muted-foreground",
             )}
           >
-            <PendingIcon icon={ICONS[n.icon] ?? Truck} className="size-6" />
+            {/* Активный пункт отличался только цветом. Подложка под иконкой —
+                второй признак: он виден и под ярким солнцем, и при дальтонизме. */}
+            <span
+              className={cn(
+                "grid place-items-center rounded-full px-3 py-0.5",
+                active(n) ? "bg-primary/12" : "",
+              )}
+            >
+              <PendingIcon icon={ICONS[n.icon] ?? Truck} className="size-6" />
+            </span>
             {n.label}
           </Link>
         ))}
@@ -118,6 +128,7 @@ export function NavBar({ items, variant }: { items: NavItem[]; variant: "top" | 
         <Link
           key={n.href}
           href={n.href}
+          aria-current={active(n) ? "page" : undefined}
           className={cn(
             "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
             active(n) ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",

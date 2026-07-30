@@ -6,6 +6,7 @@ import { Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GroupLabel } from "@/components/ui/group-label";
 import { toast } from "sonner";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import type { AppUser, UsersScreenData } from "@/lib/data/users";
@@ -113,8 +114,11 @@ export function UsersClient({ data }: { data: UsersScreenData }) {
               </>
             ) : (
               <div className="flex flex-col gap-1.5 sm:col-span-2">
-                <Label>Email</Label>
-                <p className="text-sm text-muted-foreground">{(editing as AppUser).email}</p>
+                {/* Не <Label>: email здесь не поле ввода, а показанное значение. */}
+                <GroupLabel id="email-label">Email</GroupLabel>
+                <p className="text-sm text-muted-foreground" aria-labelledby="email-label">
+                  {(editing as AppUser).email}
+                </p>
               </div>
             )}
             <div className="flex flex-col gap-1.5 sm:col-span-2">
@@ -124,8 +128,8 @@ export function UsersClient({ data }: { data: UsersScreenData }) {
             </div>
           </div>
 
-          <div className="mt-3">
-            <Label>Роли *</Label>
+          <div className="mt-3" role="group" aria-labelledby="roles-label">
+            <GroupLabel id="roles-label">Роли *</GroupLabel>
             <div className="mt-2 flex flex-wrap gap-2">
               {ROLES.map((r) => (
                 <label key={r}

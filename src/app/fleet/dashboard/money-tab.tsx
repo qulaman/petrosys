@@ -67,7 +67,7 @@ function Deviation({ value, med, sample }: { value: number | null; med: number |
   const d = Math.round(((value - med) / med) * 100);
   if (d === 0) return null;
   const cls = d >= 30 ? "text-destructive" : d >= 15 ? "text-warning" : d <= -15 ? "text-success" : "text-muted-foreground";
-  return <span className={cn("ml-1 text-[11px] font-normal tabular-nums", cls)}>{d > 0 ? "+" : ""}{d}%</span>;
+  return <span className={cn("ml-1 text-xs font-normal tabular-nums", cls)}>{d > 0 ? "+" : ""}{d}%</span>;
 }
 
 /** Количество как «оплачено / всего»: расхождение — это дыра в прайсе договора. */
@@ -332,7 +332,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
                 <tr key={c.id} className="hover:bg-accent/40">
                   <td className="px-3 py-2 font-medium">
                     <Link href={settlementHref(c)} className="hover:underline" title="Открыть расчёт по договору">{c.number}</Link>
-                    <span className="ml-1.5 rounded-full border px-1.5 py-0.5 text-[10px] text-muted-foreground">{TYPE_LABEL(c.contract_type)}</span>
+                    <span className="ml-1.5 rounded-full border px-1.5 py-0.5 text-xs text-muted-foreground">{TYPE_LABEL(c.contract_type)}</span>
                   </td>
                   <td className="px-3 py-2">
                     <Link href={settlementHref(c)} className="hover:underline">{c.contractor}</Link>
@@ -503,7 +503,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
             {ranking.ranked.slice(0, 12).map((r) => (
               <li key={r.rank} className="flex items-center gap-2">
                 <span
-                  className="grid size-5 shrink-0 place-items-center rounded text-[11px] font-semibold text-white"
+                  className="grid size-5 shrink-0 place-items-center rounded text-xs font-semibold text-[var(--chart-ink-on-fill)]"
                   style={{ background: r.rank <= 6 ? PIE_COLORS[(r.rank - 1) % PIE_COLORS.length] : OTHER_COLOR }}
                 >
                   {r.rank}

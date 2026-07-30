@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { StatusBadge, type StatusTone } from "@/components/ui/status-badge";
 import { SearchSelect } from "@/components/ui/search-select";
+import { ru } from "@/lib/i18n/ru";
 import { fmtDateTime } from "@/lib/format";
 import { SEVERITY_LABELS, STATUS_LABELS } from "@/lib/anomalies";
 import { cn } from "@/lib/utils";
@@ -135,7 +136,7 @@ export function AnomaliesClient({
   function act(fn: () => Promise<{ ok: boolean; error?: string; count?: number }>, successMsg?: string) {
     start(async () => {
       const res = await fn();
-      if (!res.ok) toast.error(res.error ?? "Ошибка");
+      if (!res.ok) toast.error(res.error ?? ru.errors.generic);
       else {
         if (successMsg) toast.success(successMsg.replace("{n}", String(res.count ?? "")));
         else if (typeof res.count === "number") toast.success(`Пересчёт: +${res.count} новых аномалий`);

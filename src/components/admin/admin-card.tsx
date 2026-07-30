@@ -49,7 +49,7 @@ export function AdminCard({
         <span className="shrink-0 text-right">
           <span className="block text-sm font-semibold tabular-nums">{count}</span>
           {note ? (
-            <span className="block text-[11px] leading-tight text-muted-foreground">{note}</span>
+            <span className="block text-xs leading-tight text-muted-foreground">{note}</span>
           ) : null}
         </span>
       ) : null}

@@ -7,10 +7,12 @@ import { Check, CopyPlus, FilePlus2, Lock, PenLine, Plus, Trash2 } from "lucide-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GroupLabel } from "@/components/ui/group-label";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
 import { useNavProgress } from "@/components/nav-progress";
 import { OutboxList } from "@/components/field/outbox-list";
+import { ru } from "@/lib/i18n/ru";
 import { useOutbox, type SubmitResult } from "@/lib/outbox/use-outbox";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { uploadSignature } from "@/lib/storage/upload";
@@ -80,7 +82,7 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
   function act(fn: () => Promise<{ ok: boolean; error?: string }>, okMsg?: string) {
     start(async () => {
       const res = await fn();
-      if (!res.ok) { toast.error(res.error ?? "Ошибка"); return; }
+      if (!res.ok) { toast.error(res.error ?? ru.errors.generic); return; }
       if (okMsg) toast.success(okMsg);
       router.refresh();
     });
@@ -160,7 +162,10 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
       <ShiftPicker date={data.date} shift={data.shift} onChange={setParams} />
 
       {/* Статус-плашка */}
-      <div className={`flex items-center gap-2 rounded-lg border p-3 text-sm font-medium ${isClosed ? "border-success/40 bg-success/10" : ""}`}>
+      <div
+        role="status"
+        className={`flex items-center gap-2 rounded-lg border p-3 text-sm font-medium ${isClosed ? "border-success/40 bg-success/10" : ""}`}
+      >
         {isClosed ? <Lock className="size-4 text-success" /> : <PenLine className="size-4 text-primary" />}
         {STATUS_LABEL[journal.status]}
         {journal.status === "filling" ? (
@@ -170,8 +175,9 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
 
       {/* Вид работ */}
       <div className="flex flex-col gap-1.5">
-        <Label>Вид работ</Label>
+        <Label htmlFor="work-type">Вид работ</Label>
         <select
+          id="work-type"
           value={journal.work_type_id ?? ""}
           disabled={isClosed || pending}
           onChange={(e) => act(() => updateJournal(journal.id, { work_type_id: e.target.value || null }))}
@@ -185,8 +191,8 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
       </div>
 
       {/* Строки журнала */}
-      <div className="flex flex-col gap-2">
-        <Label>Техника на линии ({lines.length})</Label>
+      <div className="flex flex-col gap-2" role="group" aria-labelledby="lines-label">
+        <GroupLabel id="lines-label">Техника на линии ({lines.length})</GroupLabel>
         {lines.map((l) => {
           const v = vehById.get(l.vehicle_id);
           const signed = !!l.driver_signature_url;
@@ -196,7 +202,7 @@ export function ShiftsClient({ data, isAdmin = false }: { data: ShiftJournalData
                 <span className="text-lg font-bold tracking-tight">{v?.reg_number ?? "—"}</span>
                 <span className="text-xs text-muted-foreground">{v ? vehicleTypeLabel(v.vehicle_type) : ""}</span>
                 {signed ? (
-                  <span className="ml-auto flex items-center gap-1 rounded-full bg-success px-2 py-0.5 text-xs font-semibold text-white">
+                  <span className="ml-auto flex items-center gap-1 rounded-full bg-success px-2 py-0.5 text-xs font-semibold text-success-foreground">
                     <Check className="size-3.5" /> подписано
                   </span>
                 ) : null}
@@ -402,8 +408,8 @@ function ShiftPicker({
         <Label htmlFor="jr-date">Дата</Label>
         <Input id="jr-date" type="date" value={date} onChange={(e) => onChange(e.target.value, shift)} className="h-12" />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Label>Смена</Label>
+      <div className="flex flex-col gap-1.5" role="group" aria-labelledby="shift-label">
+        <GroupLabel id="shift-label">Смена</GroupLabel>
         <div className="grid grid-cols-2 gap-1">
           <Button type="button" className="h-12" variant={shift === "day" ? "default" : "outline"} onClick={() => onChange(date, "day")}>День</Button>
           <Button type="button" className="h-12" variant={shift === "night" ? "default" : "outline"} onClick={() => onChange(date, "night")}>Ночь</Button>

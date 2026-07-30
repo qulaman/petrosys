@@ -141,28 +141,28 @@ export function ContractDetailView({
       {/* Реквизиты договора */}
       <section className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
-          <Label>Контрагент</Label>
-          <select value={form.contractor_id} onChange={(e) => setForm((s) => ({ ...s, contractor_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+          <Label htmlFor="cd-contractor">Контрагент</Label>
+          <select id="cd-contractor" value={form.contractor_id} onChange={(e) => setForm((s) => ({ ...s, contractor_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
             {data.contractors.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </select>
         </div>
-        <div className="flex flex-col gap-1.5"><Label>Номер</Label><Input value={form.number} onChange={(e) => setForm((s) => ({ ...s, number: e.target.value }))} /></div>
+        <div className="flex flex-col gap-1.5"><Label htmlFor="cd-number">Номер</Label><Input id="cd-number" value={form.number} onChange={(e) => setForm((s) => ({ ...s, number: e.target.value }))} /></div>
         <div className="flex flex-col gap-1.5">
-          <Label>Тип</Label>
-          <select value={form.contract_type} onChange={(e) => setForm((s) => ({ ...s, contract_type: e.target.value as typeof form.contract_type }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+          <Label htmlFor="cd-type">Тип</Label>
+          <select id="cd-type" value={form.contract_type} onChange={(e) => setForm((s) => ({ ...s, contract_type: e.target.value as typeof form.contract_type }))} className="h-10 rounded-md border bg-background px-3 text-sm">
             <option value="transportation">Перевозка</option>
             <option value="equipment">Услуги техники</option>
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label>Расчётный период</Label>
-          <select value={form.billing_period} onChange={(e) => setForm((s) => ({ ...s, billing_period: e.target.value as typeof form.billing_period }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+          <Label htmlFor="cd-period">Расчётный период</Label>
+          <select id="cd-period" value={form.billing_period} onChange={(e) => setForm((s) => ({ ...s, billing_period: e.target.value as typeof form.billing_period }))} className="h-10 rounded-md border bg-background px-3 text-sm">
             <option value="monthly">Месяц</option>
             <option value="15days">15 дней</option>
           </select>
         </div>
-        <div className="flex flex-col gap-1.5"><Label>Действует с</Label><Input type="date" value={form.valid_from} onChange={(e) => setForm((s) => ({ ...s, valid_from: e.target.value }))} /></div>
-        <div className="flex flex-col gap-1.5"><Label>по</Label><Input type="date" value={form.valid_to} onChange={(e) => setForm((s) => ({ ...s, valid_to: e.target.value }))} /></div>
+        <div className="flex flex-col gap-1.5"><Label htmlFor="cd-from">Действует с</Label><Input id="cd-from" type="date" value={form.valid_from} onChange={(e) => setForm((s) => ({ ...s, valid_from: e.target.value }))} /></div>
+        <div className="flex flex-col gap-1.5"><Label htmlFor="cd-to">по</Label><Input id="cd-to" type="date" value={form.valid_to} onChange={(e) => setForm((s) => ({ ...s, valid_to: e.target.value }))} /></div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm((s) => ({ ...s, is_active: e.target.checked }))} className="size-4" /> Активен</label>
         <div className="sm:col-span-2"><Button onClick={saveContract} loading={pending}>Сохранить договор</Button></div>
       </section>

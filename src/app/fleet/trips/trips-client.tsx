@@ -8,11 +8,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GroupLabel } from "@/components/ui/group-label";
 import { QrScanner } from "@/components/field/qr-scanner";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
 import { useNavProgress } from "@/components/nav-progress";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { ru } from "@/lib/i18n/ru";
 import { useOutbox } from "@/lib/outbox/use-outbox";
 import { uploadSignature } from "@/lib/storage/upload";
 import { fmtTime } from "@/lib/format";
@@ -193,7 +195,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
   function act(fn: () => Promise<{ ok: boolean; error?: string }>, okMsg?: string) {
     start(async () => {
       const res = await fn();
-      if (!res.ok) { toast.error(res.error ?? "Ошибка"); return; }
+      if (!res.ok) { toast.error(res.error ?? ru.errors.generic); return; }
       if (okMsg) toast.success(okMsg);
       router.refresh();
     });
@@ -263,7 +265,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
       vehicles.find((v) => v.qr_code === t) ??
       vehicles.find((v) => v.reg_number.replace(/\s/g, "") === t.replace(/\s/g, ""));
     if (!match) {
-      setError("QR не распознан. Выберите машину из сетки.");
+      setError(ru.errors.qrUnknown);
       return;
     }
     if (!onLineSet.has(match.id)) {
@@ -277,7 +279,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
           onClick: () =>
             start(async () => {
               const res = await addLineupVehicle({ lineup_id: lineupId, vehicle_id: match.id });
-              if (!res.ok) { toast.error(res.error ?? "Ошибка"); return; }
+              if (!res.ok) { toast.error(res.error ?? ru.errors.generic); return; }
               recordTrip(match.id);
               router.refresh();
             }),
@@ -546,7 +548,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
             onMinus={async (lastId) => {
               const res = await deleteTrip(lastId);
               if (res.ok) { toast.success("Рейс убран"); router.refresh(); }
-              else toast.error(res.error ?? "Ошибка");
+              else toast.error(res.error ?? ru.errors.generic);
             }}
           />
           <p className="text-xs text-muted-foreground">
@@ -631,8 +633,8 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
         {manageOpen ? (
           <div className="flex flex-col gap-3 rounded-lg border p-3">
             {source ? (
-              <div className="flex flex-col gap-1.5">
-                <Label>Перечень прошлой смены</Label>
+              <div className="flex flex-col gap-1.5" role="group" aria-labelledby="inherit-label">
+                <GroupLabel id="inherit-label">Перечень прошлой смены</GroupLabel>
                 <Button
                   variant="outline"
                   className="h-12 justify-start gap-2"
@@ -651,8 +653,8 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
               </div>
             ) : null}
 
-            <div className="flex flex-col gap-1.5">
-              <Label>Не на линии — нажмите, чтобы вывести</Label>
+            <div className="flex flex-col gap-1.5" role="group" aria-labelledby="offline-label">
+              <GroupLabel id="offline-label">Не на линии — нажмите, чтобы вывести</GroupLabel>
               <VehiclePicker
                 vehicles={offLineVehicles}
                 sub="brand"
@@ -664,8 +666,8 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
               />
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label>На линии — нажмите, чтобы снять (пока нет рейсов)</Label>
+            <div className="flex flex-col gap-1.5" role="group" aria-labelledby="online-label">
+              <GroupLabel id="online-label">На линии — нажмите, чтобы снять (пока нет рейсов)</GroupLabel>
               <VehiclePicker
                 vehicles={onLineVehicles}
                 sub="brand"
@@ -803,7 +805,7 @@ export function TripsClient({ data }: { data: TripsScreenData }) {
                     onClick={async () => {
                       const res = await deleteTrip(t.id);
                       if (res.ok) { toast.success("Рейс отменён"); router.refresh(); }
-                      else { devError("deleteTrip", res.error); toast.error(res.error ?? "Ошибка"); }
+                      else { devError("deleteTrip", res.error); toast.error(res.error ?? ru.errors.generic); }
                     }}
                   >
                     <Trash2 className="size-4" /> Отменить
@@ -998,8 +1000,8 @@ function ShiftPicker({
         <Label htmlFor="tr-date">Дата</Label>
         <Input id="tr-date" type="date" value={date} onChange={(e) => onChange(e.target.value, shift)} className="h-12" />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Label>Смена</Label>
+      <div className="flex flex-col gap-1.5" role="group" aria-labelledby="tr-shift-label">
+        <GroupLabel id="tr-shift-label">Смена</GroupLabel>
         <div className="grid grid-cols-2 gap-1">
           <Button type="button" className="h-12" variant={shift === "day" ? "default" : "outline"} onClick={() => onChange(date, "day")}>День</Button>
           <Button type="button" className="h-12" variant={shift === "night" ? "default" : "outline"} onClick={() => onChange(date, "night")}>Ночь</Button>

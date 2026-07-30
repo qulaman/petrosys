@@ -180,8 +180,9 @@ export function TripJournal({
           <DialogHeader><DialogTitle>Правка рейса · {editing?.reg}</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label>Машина</Label>
+              <Label htmlFor="tj-vehicle">Машина</Label>
               <SearchSelect
+                id="tj-vehicle"
                 value={form.vehicle_id}
                 onChange={(v) => setForm((s) => ({ ...s, vehicle_id: v || s.vehicle_id }))}
                 options={vehicles.map((v) => ({ value: v.id, label: v.reg_number }))}
@@ -189,14 +190,14 @@ export function TripJournal({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Водитель</Label>
-              <select value={form.driver_id} onChange={(e) => setForm((s) => ({ ...s, driver_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <Label htmlFor="tj-driver">Водитель</Label>
+              <select id="tj-driver" value={form.driver_id} onChange={(e) => setForm((s) => ({ ...s, driver_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
                 {drivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Маршрут</Label>
-              <select value={form.route_id} onChange={(e) => setForm((s) => ({ ...s, route_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <Label htmlFor="tj-route">Маршрут</Label>
+              <select id="tj-route" value={form.route_id} onChange={(e) => setForm((s) => ({ ...s, route_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
                 {routes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
               </select>
             </div>

@@ -210,8 +210,9 @@ export function ShiftJournal({
           </p>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label>Машина</Label>
+              <Label htmlFor="sj-vehicle">Машина</Label>
               <SearchSelect
+                id="sj-vehicle"
                 value={form.vehicle_id}
                 onChange={(v) => setForm((s) => ({ ...s, vehicle_id: v || s.vehicle_id }))}
                 options={vehicles.map((v) => ({ value: v.id, label: v.reg_number }))}
@@ -219,18 +220,18 @@ export function ShiftJournal({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Часы</Label>
-              <Input inputMode="decimal" value={form.hours} onChange={(e) => setForm((s) => ({ ...s, hours: e.target.value.replace(/[^\d.]/g, "") }))} />
+              <Label htmlFor="sj-hours">Часы</Label>
+              <Input id="sj-hours" inputMode="decimal" value={form.hours} onChange={(e) => setForm((s) => ({ ...s, hours: e.target.value.replace(/[^\d.]/g, "") }))} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Водитель</Label>
-              <select value={form.driver_id} onChange={(e) => setForm((s) => ({ ...s, driver_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <Label htmlFor="sj-driver">Водитель</Label>
+              <select id="sj-driver" value={form.driver_id} onChange={(e) => setForm((s) => ({ ...s, driver_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
                 {drivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Вид работ</Label>
-              <select value={form.work_type_id} onChange={(e) => setForm((s) => ({ ...s, work_type_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <Label htmlFor="sj-work-type">Вид работ</Label>
+              <select id="sj-work-type" value={form.work_type_id} onChange={(e) => setForm((s) => ({ ...s, work_type_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
                 <option value="">—</option>
                 {workTypes.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>

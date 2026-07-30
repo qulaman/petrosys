@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { Camera, Check, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GroupLabel } from "@/components/ui/group-label";
+import { ru } from "@/lib/i18n/ru";
 import { cn } from "@/lib/utils";
 import { NumberKeypad } from "@/components/field/number-keypad";
 import { SignaturePad } from "@/components/field/signature-pad";
@@ -61,6 +63,14 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Якоря для «Выдать»: если чего-то не хватает, фокус уезжает на нужный блок.
+  const sourceRef = useRef<HTMLDivElement>(null);
+  const vehicleRef = useRef<HTMLElement>(null);
+  const driverRef = useRef<HTMLSelectElement>(null);
+  const litersRef = useRef<HTMLOutputElement>(null);
+  const receiptRef = useRef<HTMLInputElement>(null);
+  const signRef = useRef<HTMLButtonElement>(null);
 
   const sourceType = sourceKey?.startsWith("card:")
     ? "card"
@@ -123,7 +133,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
       vehicles.find((v) => v.qr_code === t) ??
       vehicles.find((v) => v.reg_number.replace(/\s/g, "") === t.replace(/\s/g, ""));
     if (match) selectVehicle(match.id);
-    else setError("QR не распознан. Выберите машину из списка.");
+    else setError(ru.errors.qrUnknown);
   }
 
   async function onReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -135,16 +145,36 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
     setReceiptUrl(f ? URL.createObjectURL(f) : null);
   }
 
-  const canSubmit =
-    !!sourceType &&
-    !!vehicleId &&
-    !!driverId &&
-    litersNum > 0 &&
-    !!sigDataUrl &&
-    (sourceType !== "card" || !!receiptFile);
+  /**
+   * Первое незаполненное место: текст для заправщика + куда увести фокус.
+   * Кнопка «Выдать» больше не гаснет — серая кнопка не объясняла, чего не
+   * хватает, и на смене приходилось искать пропуск глазами.
+   */
+  function firstMissing(): { msg: string; el: HTMLElement | null } | null {
+    if (!sourceType)
+      return { msg: "Выберите источник топлива — счёт АЗС или бензовоз.", el: sourceRef.current };
+    if (!vehicleId) return { msg: "Выберите технику.", el: vehicleRef.current };
+    if (!driverId) return { msg: "Выберите водителя.", el: driverRef.current };
+    if (!(litersNum > 0)) return { msg: "Введите литры.", el: litersRef.current };
+    if (sourceType === "card" && !receiptFile)
+      return {
+        msg: "Сфотографируйте чек — по счёту АЗС он обязателен.",
+        el: receiptRef.current,
+      };
+    if (!sigDataUrl)
+      return { msg: "Возьмите подпись водителя.", el: signRef.current };
+    return null;
+  }
 
   function submit() {
-    if (!canSubmit || !sourceType || !vehicleId || !driverId || !sigDataUrl) return;
+    const miss = firstMissing();
+    if (miss) {
+      setError(miss.msg);
+      miss.el?.focus();
+      miss.el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    if (!sourceType || !vehicleId || !driverId || !sigDataUrl) return;
     setError(null);
     const veh = vehicles.find((v) => v.id === vehicleId);
     const label = `${veh?.reg_number ?? "машина"} · ${fmtLiters(litersNum)}`;
@@ -189,8 +219,14 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
   // Источник топлива — используется и в обычном потоке, и внутри закреплённого
   // блока выбора техники (чтобы «Счёт АЗС / Бензовоз» не уезжал при листании).
   const sourceBlock = (
-    <div className="flex flex-col gap-2">
-      <Label>Источник топлива</Label>
+    <div
+      className="flex flex-col gap-2"
+      role="group"
+      aria-labelledby="source-label"
+      ref={sourceRef}
+      tabIndex={-1}
+    >
+      <GroupLabel id="source-label">Источник топлива</GroupLabel>
       <div className="flex flex-wrap gap-2">
         {cards.map((c) => {
           const key = `card:${c.id}`;
@@ -222,7 +258,12 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
         })}
       </div>
       {sourceType === "tanker" ? (
-        <p className={cn("text-sm", overBalance ? "text-destructive" : "text-muted-foreground")}>
+        // role="status" — остаток и предупреждение о перерасходе меняются
+        // на ходу, без живой области они молча проходили мимо читалки.
+        <p
+          role="status"
+          className={cn("text-sm", overBalance ? "text-destructive" : "text-muted-foreground")}
+        >
           Остаток бензовоза: {fmtLiters(tankerBalance)}
           {overBalance ? " · выдаётся больше остатка!" : ""}
         </p>
@@ -234,10 +275,16 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
     // Запас снизу = высота закреплённой панели выдачи + нижнее меню.
     <div className="mx-auto flex w-full max-w-md flex-col gap-6 pb-[calc(6rem_+_var(--app-bottom-nav,0px))]">
       {done ? (
-        <div className="flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-3 text-sm">
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-lg border border-success/40 bg-success/10 p-3 text-sm"
+        >
           <Check className="size-5 text-success" />
           <span>{done}</span>
-          <button className="ml-auto underline" onClick={() => setDone(null)}>
+          <button
+            className="ml-auto min-h-11 px-2 underline"
+            onClick={() => setDone(null)}
+          >
             Ещё выдача
           </button>
         </div>
@@ -249,8 +296,8 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
       {vehicle ? (
         <>
           <section>{sourceBlock}</section>
-          <section className="flex flex-col gap-2">
-            <Label>Техника</Label>
+          <section className="flex flex-col gap-2" role="group" aria-labelledby="vehicle-label">
+            <GroupLabel id="vehicle-label">Техника</GroupLabel>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
                 <p className="text-xl font-bold tracking-tight">{vehicle.reg_number}</p>
@@ -258,14 +305,14 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
                   {vehicle.brand} · {vehicleTypeLabel(vehicle.vehicle_type)}
                 </p>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setVehicleId(null)}>
+              <Button variant="ghost" size="field" onClick={() => setVehicleId(null)}>
                 Сменить
               </Button>
             </div>
           </section>
         </>
       ) : (
-        <section>
+        <section ref={vehicleRef} tabIndex={-1}>
           <VehiclePicker
             vehicles={vehicles}
             onSelect={(v) => selectVehicle(v.id)}
@@ -291,6 +338,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
           <Label htmlFor="driver">Водитель</Label>
           <select
             id="driver"
+            ref={driverRef}
             value={driverId ?? ""}
             onChange={(e) => setDriverId(e.target.value)}
             className="h-12 rounded-md border bg-background px-3 text-base"
@@ -318,12 +366,20 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
       ) : null}
 
       {/* 4. Литры */}
-      <section className="flex flex-col gap-2">
-        <Label>Литры</Label>
-        <div className="rounded-lg border p-3 text-right text-4xl font-bold tabular-nums">
+      <section className="flex flex-col gap-2" role="group" aria-labelledby="liters-label">
+        <GroupLabel id="liters-label">Литры</GroupLabel>
+        {/* <output> вместо <div>: у кейпада нет поля ввода, и нажатия цифр
+            ничего не сообщали — набранное значение читалось только глазами. */}
+        <output
+          ref={litersRef}
+          tabIndex={-1}
+          aria-live="polite"
+          aria-label="Набрано литров"
+          className="block rounded-lg border p-3 text-right text-4xl font-bold tabular-nums"
+        >
           {liters || "0"}
           <span className="ml-1 text-lg text-muted-foreground">л</span>
-        </div>
+        </output>
         <NumberKeypad value={liters} onChange={setLiters} />
       </section>
 
@@ -341,17 +397,25 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
 
       {/* 6. Чек */}
       <section className="flex flex-col gap-2">
-        <Label>
+        <Label htmlFor="receipt">
           Фото чека{sourceType === "card" ? " (обязательно)" : " (необязательно)"}
         </Label>
-        <label className="flex h-14 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed">
+        <label
+          htmlFor="receipt"
+          className="flex h-14 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+        >
           <Camera className="size-5" />
           {receiptFile ? "Заменить фото" : "Сделать фото"}
+          {/* sr-only, а не hidden: `display:none` убирает поле из фокуса, и снять
+              фото с клавиатуры было невозможно — а по счёту АЗС чек обязателен,
+              то есть выдача не доводилась до конца вообще. */}
           <input
+            id="receipt"
+            ref={receiptRef}
             type="file"
             accept="image/*"
             capture="environment"
-            className="hidden"
+            className="sr-only"
             onChange={onReceiptChange}
           />
         </label>
@@ -362,10 +426,11 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
       </section>
 
       {/* 7. Подпись */}
-      <section className="flex flex-col gap-2">
-        <Label>Подпись водителя (обязательно)</Label>
+      <section className="flex flex-col gap-2" role="group" aria-labelledby="sign-label">
+        <GroupLabel id="sign-label">Подпись водителя (обязательно)</GroupLabel>
         <Button
           type="button"
+          ref={signRef}
           variant={sigDataUrl ? "secondary" : "outline"}
           className="h-14"
           onClick={() => setShowSig(true)}
@@ -394,12 +459,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
         style={{ bottom: "var(--app-bottom-nav, 0px)" }}
       >
         <div className="mx-auto max-w-md">
-          <Button
-            className="h-14 w-full text-lg"
-            loading={pending}
-            disabled={!canSubmit}
-            onClick={submit}
-          >
+          <Button className="h-14 w-full text-lg" loading={pending} onClick={submit}>
             {pending ? "Сохранение…" : `Выдать ${litersNum > 0 ? fmtInt(litersNum) + " л" : ""}`}
           </Button>
         </div>

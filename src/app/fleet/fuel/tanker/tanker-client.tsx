@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { GroupLabel } from "@/components/ui/group-label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -221,9 +222,11 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
       </Card>
 
       {done ? (
-        <div className="rounded-lg border border-success/40 bg-success/10 p-3 text-sm">
+        <div role="status" className="rounded-lg border border-success/40 bg-success/10 p-3 text-sm">
           {done}{" "}
-          <button className="underline" onClick={() => setDone(null)}>ok</button>
+          <button className="min-h-11 px-2 underline" onClick={() => setDone(null)}>
+            Понятно
+          </button>
         </div>
       ) : null}
 
@@ -276,10 +279,15 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
             </select>
           </div>
           <div className="flex flex-col gap-2">
-            <Label>Фото чека (необязательно)</Label>
-            <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm">
+            <Label htmlFor="refill-receipt">Фото чека (необязательно)</Label>
+            {/* sr-only, а не hidden: display:none убирает поле из фокуса и снять
+                фото с клавиатуры нельзя. Тот же случай, что в выдаче топлива. */}
+            <label
+              htmlFor="refill-receipt"
+              className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed text-sm focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50"
+            >
               {rFile ? "Заменить фото" : "Сделать фото"}
-              <input type="file" accept="image/*" capture="environment" className="hidden"
+              <input id="refill-receipt" type="file" accept="image/*" capture="environment" className="sr-only"
                 onChange={(e) => setRFile(e.target.files?.[0] ?? null)} />
             </label>
           </div>
@@ -319,8 +327,8 @@ export function TankerClient({ data, isAdmin = false }: { data: TankerScreenData
       )}
 
       {/* История */}
-      <section className="flex flex-col gap-2">
-        <Label>История операций</Label>
+      <section className="flex flex-col gap-2" aria-labelledby="history-label">
+        <GroupLabel id="history-label">История операций</GroupLabel>
         <div className="flex flex-col divide-y rounded-lg border">
           {events.length === 0 ? (
             <EmptyState icon={Fuel} title="Операций пока нет" description="Приходы, выдачи и замеры появятся здесь." className="border-0 p-6" />

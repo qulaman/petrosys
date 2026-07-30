@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { Truck } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ru } from "@/lib/i18n/ru";
 import {
   VEHICLE_TYPE_LABELS_PLURAL,
   vehicleTypeLabel,
@@ -47,7 +51,7 @@ export function VehiclePicker({
   disabled,
   sub = "type",
   large = false,
-  emptyText = "Ничего не найдено",
+  emptyText = ru.empty.notFound,
   noVehiclesText,
   searchTrailing,
   tileTrailing,
@@ -68,6 +72,8 @@ export function VehiclePicker({
   );
   const effType = type !== "all" && types.includes(type as VehicleType) ? type : "all";
   const q = search.trim().toLowerCase();
+  /** Список отфильтрован пользователем — значит, у пустого результата есть выход. */
+  const filtered = q !== "" || effType !== "all";
   const shown = vehicles.filter(
     (v) =>
       (effType === "all" || v.vehicle_type === effType) &&
@@ -146,9 +152,36 @@ export function VehiclePicker({
           );
         })}
         {shown.length === 0 ? (
-          <p className="col-span-2 text-sm text-muted-foreground">
-            {vehicles.length === 0 && noVehiclesText ? noVehiclesText : emptyText}
-          </p>
+          // Пустой парк и пустая выдача фильтра — разные ситуации: в первой
+          // сбрасывать нечего, во второй нужно назвать запрос и дать выход.
+          <div className="col-span-2">
+            {vehicles.length === 0 && noVehiclesText ? (
+              <EmptyState icon={Truck} title={noVehiclesText} className="border-0 p-6" />
+            ) : (
+              <EmptyState
+                icon={Truck}
+                title={q ? `${ru.empty.notFound} по «${search.trim()}»` : emptyText}
+                description={
+                  filtered ? "Проверьте номер или снимите фильтр по виду техники." : undefined
+                }
+                action={
+                  filtered ? (
+                    <Button
+                      variant="outline"
+                      size="field"
+                      onClick={() => {
+                        setSearch("");
+                        setType("all");
+                      }}
+                    >
+                      {ru.empty.resetFilters}
+                    </Button>
+                  ) : undefined
+                }
+                className="border-0 p-6"
+              />
+            )}
+          </div>
         ) : null}
       </div>
     </div>
@@ -160,7 +193,7 @@ function TypeChip({ label, active, onClick }: { label: string; active: boolean; 
     <button
       type="button"
       onClick={onClick}
-      className={`h-9 shrink-0 rounded-full border px-3 text-sm font-medium ${
+      className={`h-11 shrink-0 rounded-full border px-4 text-sm font-medium ${
         active ? "border-primary bg-primary text-primary-foreground" : "bg-background active:bg-accent"
       }`}
     >

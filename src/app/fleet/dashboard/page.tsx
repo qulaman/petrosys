@@ -50,7 +50,7 @@ async function AnomalyBadge() {
   const supabase = await createClient();
   const { count } = await supabase.from("anomalies").select("id", { count: "exact", head: true }).eq("status", "new");
   if (!count) return null;
-  return <span className="rounded-full bg-destructive px-1.5 text-xs font-semibold text-white">{count}</span>;
+  return <span className="rounded-full bg-destructive px-1.5 text-xs font-semibold text-destructive-foreground">{count}</span>;
 }
 
 async function TabContent({ tab, period }: { tab: string; period: ResolvedPeriod }) {

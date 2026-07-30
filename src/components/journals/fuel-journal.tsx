@@ -195,8 +195,9 @@ export function FuelJournal({
           </p>
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label>Машина</Label>
+              <Label htmlFor="fj-vehicle">Машина</Label>
               <SearchSelect
+                id="fj-vehicle"
                 value={form.vehicle_id}
                 onChange={(v) => setForm((s) => ({ ...s, vehicle_id: v || s.vehicle_id }))}
                 options={vehicles.map((v) => ({ value: v.id, label: v.reg_number }))}
@@ -204,16 +205,16 @@ export function FuelJournal({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Литры</Label>
-              <Input inputMode="decimal" value={form.liters} onChange={(e) => setForm((s) => ({ ...s, liters: e.target.value.replace(/[^\d.]/g, "") }))} />
+              <Label htmlFor="fj-liters">Литры</Label>
+              <Input id="fj-liters" inputMode="decimal" value={form.liters} onChange={(e) => setForm((s) => ({ ...s, liters: e.target.value.replace(/[^\d.]/g, "") }))} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Одометр / моточасы</Label>
-              <Input inputMode="decimal" value={form.odometer} onChange={(e) => setForm((s) => ({ ...s, odometer: e.target.value.replace(/[^\d.]/g, "") }))} />
+              <Label htmlFor="fj-odometer">Одометр / моточасы</Label>
+              <Input id="fj-odometer" inputMode="decimal" value={form.odometer} onChange={(e) => setForm((s) => ({ ...s, odometer: e.target.value.replace(/[^\d.]/g, "") }))} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Водитель</Label>
-              <select value={form.driver_id} onChange={(e) => setForm((s) => ({ ...s, driver_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <Label htmlFor="fj-driver">Водитель</Label>
+              <select id="fj-driver" value={form.driver_id} onChange={(e) => setForm((s) => ({ ...s, driver_id: e.target.value }))} className="h-10 rounded-md border bg-background px-3 text-sm">
                 {drivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
               </select>
             </div>

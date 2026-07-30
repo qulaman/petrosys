@@ -6,14 +6,17 @@ import { ru } from "@/lib/i18n/ru";
 import { Toaster } from "@/components/ui/sonner";
 import { NavProgressProvider } from "@/components/nav-progress";
 
+// subsets управляет предзагрузкой: без cyrillic preload уходил на латиницу,
+// которой в интерфейсе почти нет, а весь русский текст перерисовывался вторым
+// заходом. Гос. номера и цифры остаются латиницей — нужны оба набора.
 const geistSans = Geist({
   variable: "--font-geist-sans",
-  subsets: ["latin"],
+  subsets: ["latin", "cyrillic"],
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  subsets: ["latin", "cyrillic"],
 });
 
 export const metadata: Metadata = {

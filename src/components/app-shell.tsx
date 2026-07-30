@@ -75,7 +75,10 @@ export async function AppShell({
       style={
         {
           // Суммарная высота закреплённой шапки — от неё отталкиваются нижние sticky-уровни.
-          "--app-sticky-top": showTopNav ? "100px" : "56px",
+          // В rem, а не в px: сама шапка — h-14 (3.5rem) плюс меню h-11 (2.75rem),
+          // и при увеличенном шрифте/зуме 200% фиксированные пиксели отставали,
+          // из-за чего шапка накрывала закреплённые фильтры и шапки таблиц.
+          "--app-sticky-top": showTopNav ? "6.25rem" : "3.5rem",
           // Отступ снизу для закреплённых панелей действий: высота tab-bar, если он есть,
           // иначе только безопасная зона. Без этого главная кнопка экрана уходит под меню.
           "--app-bottom-nav": showBottomNav
@@ -96,7 +99,7 @@ export async function AppShell({
             <OutboxIndicator className="mr-1" />
             <ThemeToggle />
             <form action={signOut}>
-              <Button variant="ghost" size="sm" type="submit">
+              <Button variant="ghost" size="field" type="submit">
                 {ru.common.signOut}
               </Button>
             </form>

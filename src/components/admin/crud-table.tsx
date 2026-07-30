@@ -19,6 +19,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { SearchSelect, type SearchSelectOption } from "@/components/ui/search-select";
+import { ru } from "@/lib/i18n/ru";
 import { VEHICLE_TYPE_LABELS_PLURAL, type VehicleType } from "@/lib/domain";
 import { ENTITIES, type ColumnDef, type FieldDef, type FieldType } from "@/lib/admin/registry";
 import { downloadCsv } from "@/lib/journals/csv";
@@ -192,7 +193,7 @@ export function CrudTable({
     for (const f of cfg.fields) {
       if (f.required && (values[f.key] === "" || values[f.key] == null)) miss.add(f.key);
     }
-    if (miss.size) { setMissing(miss); toast.error("Заполните обязательные поля"); return; }
+    if (miss.size) { setMissing(miss); toast.error(ru.errors.requiredFields); return; }
     const id = editing === "new" ? null : editing?.id ?? null;
     start(async () => {
       const res = await upsertRow(slug, id, values);

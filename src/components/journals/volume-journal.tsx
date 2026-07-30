@@ -315,8 +315,9 @@ export function VolumeJournal({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Смена</Label>
+              <Label htmlFor="vj-shift">Смена</Label>
               <select
+                id="vj-shift"
                 className={selectCls}
                 value={form.shift_type}
                 onChange={(e) => setForm((s) => ({ ...s, shift_type: e.target.value }))}
@@ -327,8 +328,9 @@ export function VolumeJournal({
               </select>
             </div>
             <div className="col-span-2 flex flex-col gap-1.5">
-              <Label>Статус дня</Label>
+              <Label htmlFor="vj-status">Статус дня</Label>
               <select
+                id="vj-status"
                 className={selectCls}
                 value={form.day_status}
                 onChange={(e) => setForm((s) => ({ ...s, day_status: e.target.value }))}
@@ -339,8 +341,9 @@ export function VolumeJournal({
             {work ? (
               <>
                 <div className="col-span-2 flex flex-col gap-1.5">
-                  <Label>Поток</Label>
+                  <Label htmlFor="vj-flow">Поток</Label>
                   <select
+                    id="vj-flow"
                     className={selectCls}
                     value={form.flow}
                     onChange={(e) => setForm((s) => ({ ...s, flow: e.target.value }))}
