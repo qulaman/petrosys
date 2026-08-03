@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import SignaturePadLib from "signature_pad";
 import { Button } from "@/components/ui/button";
 import { FullscreenSheet, FullscreenSheetClose } from "@/components/field/fullscreen-sheet";
+import { devLog } from "@/lib/dev-log";
 
 /**
  * Полноэкранная подпись пальцем. Сверху крупно ФИО подписанта, снизу — крупные
@@ -27,12 +28,14 @@ export function SignaturePad({
   onCancel: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
   const padRef = useRef<SignaturePadLib | null>(null);
   const [empty, setEmpty] = useState(true);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const box = boxRef.current;
+    if (!canvas || !box) return;
 
     const pad = new SignaturePadLib(canvas, {
       penColor: "#111",
@@ -40,16 +43,23 @@ export function SignaturePad({
     });
     padRef.current = pad;
 
-    // Размер холста в CSS-пикселях на момент последней настройки. Нужен, чтобы
-    // пересчитать координаты уже нарисованных штрихов при смене размера.
+    // Размер холста в CSS-пикселях на момент последней настройки битмапа. Нужен,
+    // чтобы пересчитать координаты уже нарисованных штрихов при смене размера.
     let cssW = 0;
     let cssH = 0;
 
-    const resize = () => {
+    /**
+     * Привести битмап холста к его CSS-боксу. Без этого подпись не видна:
+     * signature_pad кладёт точку в CSS-координатах относительно холста
+     * (clientX - rect.left) и рисует их в битмап как есть. Если битмап остался
+     * дефолтным 300×150, а бокс на телефоне ~360×430, всё ниже 150-го пикселя
+     * уходит за пределы битмапа — палец водит, а на экране пусто.
+     */
+    const fit = () => {
       const { width, height } = canvas.getBoundingClientRect();
       if (!width || !height) return;
-      // Мобильные браузеры шлют resize при показе/скрытии адресной строки —
-      // если размер тот же, трогать холст нельзя.
+      // Наблюдатель шлёт события и когда бокс не менялся (перерисовка слоя) —
+      // если размер тот же, трогать холст нельзя: canvas.width стирает подпись.
       if (width === cssW && height === cssH) return;
 
       // Поворот телефона раньше стирал подпись: canvas.width сбрасывает холст,
@@ -59,12 +69,19 @@ export function SignaturePad({
       const scaleX = cssW ? width / cssW : 1;
       const scaleY = cssH ? height / cssH : 1;
 
-      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      // Плотность ограничена двойкой: при DPR 3–4 битмап уходит за 1400×1700,
+      // рисование на телефоне начинает лагать, а подпись всё равно уезжает в
+      // документы вектором — на её качество плотность не влияет.
+      const ratio = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2);
       canvas.width = width * ratio;
       canvas.height = height * ratio;
       canvas.getContext("2d")?.scale(ratio, ratio);
       cssW = width;
       cssH = height;
+      devLog("signature-pad", "холст", {
+        css: `${Math.round(width)}×${Math.round(height)}`,
+        bitmap: `${canvas.width}×${canvas.height}`,
+      });
 
       if (strokes.length) {
         pad.fromData(
@@ -78,18 +95,30 @@ export function SignaturePad({
       }
       setEmpty(pad.isEmpty());
     };
-    resize();
+
+    // ResizeObserver вместо одноразового замера и слушателей window: холст живёт
+    // внутри портала base-ui (FullscreenSheet) и монтируется на пару коммитов
+    // позже формы. Одиночный замер мог прийтись на момент, когда бокса ещё нет,
+    // и молча отваливался по `if (!width || !height)` — битмап навсегда
+    // оставался 300×150. Наблюдатель отдаёт размер сразу при observe() и на
+    // каждое изменение: поворот, клавиатура, адресная строка — своих слушателей
+    // на resize/orientationchange больше не нужно.
+    const ro = new ResizeObserver(fit);
+    ro.observe(canvas);
+
+    // Страховка перед штрихом: если размер всё же разошёлся (случай, которого
+    // наблюдатель не увидел), пересчитываем ДО того, как signature_pad начнёт
+    // писать. Именно capture и именно на обёртке: свой слушатель на холсте
+    // библиотека вешает в конструкторе, то есть раньше нашего.
+    box.addEventListener("pointerdown", fit, true);
 
     const onEnd = () => setEmpty(pad.isEmpty());
     pad.addEventListener("endStroke", onEnd);
-    window.addEventListener("resize", resize);
-    // Поворот экрана на части устройств приходит только этим событием.
-    window.addEventListener("orientationchange", resize);
 
     return () => {
+      ro.disconnect();
+      box.removeEventListener("pointerdown", fit, true);
       pad.removeEventListener("endStroke", onEnd);
-      window.removeEventListener("resize", resize);
-      window.removeEventListener("orientationchange", resize);
       pad.off();
     };
   }, []);
@@ -114,7 +143,7 @@ export function SignaturePad({
       ) : null}
       {/* Холст всегда белый с чёрным штрихом — независимо от темы: подпись
           уходит в документы и должна выглядеть одинаково. */}
-      <div className="mx-4 flex-1 overflow-hidden rounded-lg border bg-white">
+      <div ref={boxRef} className="mx-4 flex-1 overflow-hidden rounded-lg border bg-white">
         <canvas
           ref={canvasRef}
           aria-label="Поле для подписи пальцем"
