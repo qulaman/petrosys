@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -89,6 +90,17 @@ export function NavBar({ items, variant }: { items: NavItem[]; variant: "top" | 
   const active = (n: NavItem) =>
     n.exact ? path === n.href : path === n.href || (n.href !== "/" && path.startsWith(n.href + "/"));
 
+  const boxRef = useRef<HTMLElement>(null);
+  const activeRef = useRef<HTMLAnchorElement>(null);
+  // Десять пунктов на телефоне не помещаются и уезжают в горизонтальную
+  // прокрутку — активный экран оставался за краем и выглядел «непобеждённым».
+  useEffect(() => {
+    const box = boxRef.current;
+    const el = activeRef.current;
+    if (!box || !el || box.scrollWidth <= box.clientWidth) return;
+    box.scrollTo({ left: Math.max(0, el.offsetLeft - (box.clientWidth - el.offsetWidth) / 2) });
+  }, [path]);
+
   if (variant === "bottom") {
     return (
       <nav
@@ -123,14 +135,15 @@ export function NavBar({ items, variant }: { items: NavItem[]; variant: "top" | 
   }
 
   return (
-    <nav className="flex h-11 items-center gap-1 overflow-x-auto border-b px-2">
+    <nav ref={boxRef} className="relative flex h-11 items-center gap-1 overflow-x-auto border-b px-2">
       {items.map((n) => (
         <Link
           key={n.href}
+          ref={active(n) ? activeRef : undefined}
           href={n.href}
           aria-current={active(n) ? "page" : undefined}
           className={cn(
-            "flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
+            "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
             active(n) ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
           )}
         >

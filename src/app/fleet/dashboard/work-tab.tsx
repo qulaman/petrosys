@@ -37,15 +37,15 @@ export function WorkTab({ data }: { data: WorkTabData }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Сводка периода */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile
           label="Рейсов за период"
           value={fmtInt(s.tripsTotal)}
           icon={Truck}
           href={`/fleet/journals/trips?${periodQ}`}
           title="Открыть журнал рейсов за период"
-          delta={<Delta now={s.tripsTotal} prev={data.prev.trips} suffix="к прошлому периоду"
-            title="Сравнение с предыдущим периодом такой же длины" />}
+          delta={<Delta now={s.tripsTotal} prev={data.prev.trips} suffix={`к ${data.prev.label}`}
+            title="База сравнения — прошедшая часть предыдущего периода" />}
         />
         <StatTile
           label="Моточасов за период"
@@ -53,15 +53,15 @@ export function WorkTab({ data }: { data: WorkTabData }) {
           icon={Timer}
           href={`/fleet/journals/shifts?${periodQ}`}
           title="Открыть табель за период"
-          delta={<Delta now={s.hoursTotal} prev={data.prev.hours} suffix="к прошлому периоду"
-            title="Сравнение с предыдущим периодом такой же длины" />}
+          delta={<Delta now={s.hoursTotal} prev={data.prev.hours} suffix={`к ${data.prev.label}`}
+            title="База сравнения — прошедшая часть предыдущего периода" />}
         />
         <StatTile
           label="Работало техники"
           value={`${s.worked}/${s.fleet}`}
           icon={Activity}
           tone={s.idle > 0 ? "warning" : "success"}
-          sub={s.idle > 0 ? `простаивало ${s.idle} — кнопка «Простаивавшие» в картах ниже` : "весь парк в работе"}
+          sub={s.idle > 0 ? `${s.idle} без единой записи за период` : "весь парк в работе"}
         />
         <StatTile
           label="Перевезено грунта"

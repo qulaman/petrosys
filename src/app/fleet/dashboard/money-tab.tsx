@@ -208,7 +208,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Сводка периода */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label="Начислено" value={fmtMoney(s.accrual)} icon={Coins} />
         <StatTile label="Удержано ГСМ" value={fmtMoney(s.fuelHold)} icon={Fuel} />
         <StatTile label="Штрафы" value={fmtMoney(s.penalty)} icon={Gavel} />
@@ -296,7 +296,9 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
               </defs>
               <CartesianGrid vertical={false} stroke="var(--border)" />
               <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} tickLine={false} axisLine={{ stroke: "var(--border)" }} interval="preserveStartEnd" minTickGap={20} />
-              <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} tickLine={false} axisLine={false} width={64} tickFormatter={(v) => fmtInt(Number(v))} />
+              {/* width="auto": на 64 px восьмизначные суммы обрезались, а на
+                  телефоне столько места оси не нужно вовсе. */}
+              <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} tickLine={false} axisLine={false} width="auto" tickFormatter={(v) => fmtInt(Number(v))} />
               <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [fmtMoney(Number(v)), n === "accrued" ? "Факт" : "Прогноз"]} />
               <Line dataKey="forecast" name="Прогноз" stroke="var(--muted-foreground)" strokeDasharray="4 4" strokeWidth={2} dot={false} />
               <Area dataKey="accrued" name="Факт" stroke="var(--chart-card)" strokeWidth={2} fill="url(#accGrad)" connectNulls={false} />
@@ -308,12 +310,19 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
       {/* Начислено и прогноз по договорам */}
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">Начислено и прогноз АВР по договорам</h3>
+        <p className="text-xs text-muted-foreground sm:hidden">Таблица прокручивается вбок →</p>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left">
+            {/* Шапка непрозрачная: под закреплённой колонкой при горизонтальном
+                скролле не должно просвечивать содержимое строк. */}
+            <thead className="bg-muted text-left">
               <tr>
                 {SORT_COLUMNS.map((col) => (
-                  <th key={col.key} className={cn("px-3 py-2", col.numeric && "text-right")}>
+                  <th key={col.key} className={cn(
+                    "whitespace-nowrap px-3 py-2",
+                    col.numeric && "text-right",
+                    col.key === "number" && "sticky left-0 z-10 bg-muted",
+                  )}>
                     <button
                       type="button"
                       onClick={() => toggleSort(col.key)}
@@ -330,7 +339,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
             <tbody className="divide-y">
               {rows.map((c) => (
                 <tr key={c.id} className="hover:bg-accent/40">
-                  <td className="px-3 py-2 font-medium">
+                  <td className="sticky left-0 z-10 whitespace-nowrap bg-background px-3 py-2 font-medium">
                     <Link href={settlementHref(c)} className="hover:underline" title="Открыть расчёт по договору">{c.number}</Link>
                     <span className="ml-1.5 rounded-full border px-1.5 py-0.5 text-xs text-muted-foreground">{TYPE_LABEL(c.contract_type)}</span>
                   </td>
@@ -349,9 +358,9 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
               ) : null}
             </tbody>
             {rows.length > 0 ? (
-              <tfoot className="border-t bg-muted/50 font-semibold">
+              <tfoot className="border-t bg-muted font-semibold">
                 <tr>
-                  <td className="px-3 py-2" colSpan={2}>Итого</td>
+                  <td className="sticky left-0 z-10 bg-muted px-3 py-2" colSpan={2}>Итого</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(s.accrual)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(s.fuelHold)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtMoney(s.penalty)}</td>
@@ -380,6 +389,7 @@ export function MoneyTab({ data }: { data: MoneyTabData }) {
             </Button>
           ) : null}
         </div>
+        <p className="text-xs text-muted-foreground sm:hidden">Таблица прокручивается вбок →</p>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             {/* Шапка непрозрачная (bg-muted, не /50): под sticky-колонкой при

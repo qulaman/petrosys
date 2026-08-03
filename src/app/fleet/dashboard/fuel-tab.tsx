@@ -79,7 +79,9 @@ export function FuelTab({ data }: { data: FuelTabData }) {
     ...r,
     label: r.vehicleType ? vehicleTypeLabel(r.vehicleType) : "Без вида",
   }));
-  const chartHeight = Math.max(180, typeRows.length * 44 + 56);
+  // +88: полосы плюс легенда recharts, которая раньше в высоту не закладывалась
+  // и на узком экране съедала место у самих полос.
+  const chartHeight = Math.max(200, typeRows.length * 44 + 88);
   const journalQuery = (type: string) => {
     const q = new URLSearchParams({ type });
     for (const k of ["period", "from", "to"]) {
@@ -96,7 +98,7 @@ export function FuelTab({ data }: { data: FuelTabData }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Сводка периода */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile label="Выдано всего" value={fmtLiters(s.totalLiters)} icon={Fuel}
           sub={`карта ${fmtInt(s.litersCard)} · бензовоз ${fmtInt(s.litersTanker)}`} />
         <StatTile label="Машин заправлено" value={fmtInt(s.vehiclesFueled)} icon={Truck} />
@@ -139,7 +141,9 @@ export function FuelTab({ data }: { data: FuelTabData }) {
               onClick={openType} className="cursor-pointer">
               <CartesianGrid horizontal={false} stroke="var(--border)" />
               <XAxis type="number" tick={axisTick} tickLine={false} axisLine={{ stroke: "var(--border)" }} tickFormatter={(v) => fmtInt(Number(v))} />
-              <YAxis type="category" dataKey="label" tick={axisTick} tickLine={false} axisLine={false} width={104} />
+              {/* width="auto" вместо жёстких 104 px: на телефоне подписи видов
+                  занимали треть графика, оставляя полосам меньше 200 px. */}
+              <YAxis type="category" dataKey="label" tick={axisTick} tickLine={false} axisLine={false} width="auto" />
               <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--accent)" }} formatter={(v) => fmtLiters(Number(v))} />
               <Legend formatter={legendFormatter} />
               <Bar dataKey="litersCard" name="Карта" stackId="a" fill="var(--chart-card)" stroke="var(--background)" strokeWidth={1} />
@@ -147,6 +151,7 @@ export function FuelTab({ data }: { data: FuelTabData }) {
             </BarChart>
           </ResponsiveContainer>
         </Panel>
+        <p className="text-xs text-muted-foreground sm:hidden">Таблица прокручивается вбок →</p>
         <Panel padded={false} className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted text-left">
@@ -296,6 +301,9 @@ export function FuelTab({ data }: { data: FuelTabData }) {
               ({Math.min(10, s.vehiclesFueled)} из {s.vehiclesFueled})
             </span>
           </h3>
+          {/* Узкий экран: номер и литры в строку над полосой. Фиксированные
+              колонки (96+128+64 px + отступы) не помещались в 300 px — полоса
+              схлопывалась в ноль, а строка вылезала за край экрана. */}
           <div className="flex flex-col gap-2 rounded-lg border p-4">
             {data.top.map((t) => {
               const share = s.totalLiters > 0 ? Math.round((t.liters / s.totalLiters) * 100) : 0;
@@ -303,22 +311,26 @@ export function FuelTab({ data }: { data: FuelTabData }) {
                 <Link
                   key={t.vehicle_id}
                   href={`/fleet/journals/fuel?vehicle=${t.vehicle_id}`}
-                  className="flex items-center gap-3 rounded px-1 hover:bg-accent"
+                  className="flex flex-col gap-1 rounded px-1 py-0.5 hover:bg-accent sm:flex-row sm:items-center sm:gap-3 sm:py-0"
                   title="Открыть журнал выдач этой машины"
                 >
-                  <span className="flex w-24 shrink-0 items-center gap-1 text-sm font-medium">
-                    {t.reg}
+                  <span className="flex items-center gap-1 text-sm font-medium sm:w-24 sm:shrink-0">
+                    <span className="truncate">{t.reg}</span>
                     {t.attention ? (
                       <AlertTriangle className="size-3.5 shrink-0 text-warning" aria-label="Есть открытая аномалия" />
                     ) : null}
+                    <span className="ml-auto text-xs font-normal tabular-nums text-muted-foreground sm:hidden">
+                      {fmtLiters(t.liters)} · {share}%
+                      {t.perHour != null ? ` · ${t.perHour} л/ч` : ""}
+                    </span>
                   </span>
-                  <div className="h-3 flex-1 rounded bg-muted">
+                  <div className="h-3 min-w-0 flex-1 rounded bg-muted">
                     <div className="h-full rounded" style={{ width: `${(t.liters / maxTop) * 100}%`, background: "var(--chart-card)" }} />
                   </div>
-                  <span className="w-32 shrink-0 text-right text-sm tabular-nums">
+                  <span className="hidden w-32 shrink-0 text-right text-sm tabular-nums sm:block">
                     {fmtLiters(t.liters)} <span className="text-muted-foreground">· {share}%</span>
                   </span>
-                  <span className="w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  <span className="hidden w-16 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block">
                     {t.perHour != null ? `${t.perHour} л/ч` : ""}
                   </span>
                 </Link>

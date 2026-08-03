@@ -215,7 +215,7 @@ export function TodayTab({ data }: { data: TodayData }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label="Техника на линии" value={`${techOnline}/${data.techTotal}`} icon={Truck} sub="с записью сегодня" />
         <StatTile label="Рейсов сегодня" value={fmtInt(tripsToday)} icon={Truck}
           href="/fleet/journals/trips?period=today" delta={<Delta now={tripsToday} prev={data.prev.trips} {...VS_YESTERDAY} />} />
@@ -366,8 +366,10 @@ export function TodayTab({ data }: { data: TodayData }) {
                       )}
                     >
                       <KindIcon kind={e.kind} />
-                      <span className="w-20 shrink-0 text-xs text-muted-foreground">{KIND_LABEL[e.kind]}</span>
-                      <span className="font-medium">{data.vehicleNames[e.vehicle_id] ?? "—"}</span>
+                      {/* На телефоне тип события несёт иконка — подпись только
+                          отбирала ширину у номера машины и детали. */}
+                      <span className="hidden w-20 shrink-0 text-xs text-muted-foreground sm:inline">{KIND_LABEL[e.kind]}</span>
+                      <span className="min-w-0 truncate font-medium">{data.vehicleNames[e.vehicle_id] ?? "—"}</span>
                       <span className="hidden truncate text-xs text-muted-foreground sm:inline">
                         {data.driverNames[e.driver_id] ?? ""}
                       </span>

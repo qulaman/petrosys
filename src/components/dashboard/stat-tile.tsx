@@ -71,7 +71,12 @@ export function StatTile({
         ) : null}
       </div>
 
-      <span className="relative text-2xl font-semibold leading-none tracking-tight lg:text-3xl">{value}</span>
+      {/* break-words обязателен: разряды в ru-RU разделены НЕразрывным пробелом,
+          и «10 897 045 ₸» не переносилось — в узкой плитке цифру просто срезало
+          по overflow-hidden, без многоточия и без подсказки. */}
+      <span className="relative text-xl font-semibold leading-tight tracking-tight break-words sm:text-2xl lg:text-3xl">
+        {value}
+      </span>
       {delta}
       {sub ? <span className="relative text-xs text-muted-foreground">{sub}</span> : null}
     </div>

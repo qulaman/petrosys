@@ -32,12 +32,14 @@ export function Delta({
   return (
     <span
       className={cn("relative inline-flex w-fit items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums", tone)}
-      title={title}
+      title={[title, suffix].filter(Boolean).join(" · ")}
     >
       <Icon className="size-3 shrink-0" />
       {diff > 0 ? "+" : ""}
       {fmt(diff)}
-      <span className="font-normal opacity-75">{suffix}</span>
+      {/* В узкой плитке хвост разворачивал бейдж на три строки — на телефоне
+          остаётся только число, пояснение живёт в подсказке. */}
+      <span className="hidden font-normal opacity-75 sm:inline">{suffix}</span>
     </span>
   );
 }

@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect } from "@/components/ui/search-select";
 import { useNavProgress } from "@/components/nav-progress";
-import { PERIOD_LABELS, type PeriodPreset } from "@/lib/journals/period";
+import { PERIOD_LABELS, PERIOD_PRESETS, resolvePeriod, type PeriodPreset } from "@/lib/journals/period";
 import { FLOW_LABELS } from "@/lib/forecast";
 import { VEHICLE_TYPE_LABELS_PLURAL } from "@/lib/domain";
 import type { FilterOptions } from "@/lib/data/journals";
 
-const PRESETS: PeriodPreset[] = ["today", "7d", "15d", "month", "custom"];
+/** Высота под палец на телефоне, обычная плотность на десктопе. */
+const BTN = "h-11 px-3.5 text-sm sm:h-7 sm:px-2.5 sm:text-[0.8rem]";
 
 /**
  * Фильтры журналов: период всегда, дальше — по журналу. Техника/подрядчик
@@ -31,7 +32,7 @@ export function JournalFilters({
   const pathname = usePathname();
   const sp = useSearchParams();
 
-  const period = (sp.get("period") as PeriodPreset) || "month";
+  const period = resolvePeriod({ period: sp.get("period") ?? undefined }).preset;
   const from = sp.get("from") ?? "";
   const to = sp.get("to") ?? "";
   const vehicleId = sp.get("vehicle") ?? "";
@@ -39,7 +40,15 @@ export function JournalFilters({
   const type = sp.get("type") ?? "";
   const shift = sp.get("shift") ?? "";
   const flow = sp.get("flow") ?? "";
-  const [clicked, setClicked] = useState<PeriodPreset | null>(null);
+  const [clicked, setClicked] = useState<PeriodPreset | "apply" | null>(null);
+  // Черновик дат: диапазон уходит на сервер одной навигацией по «Применить».
+  // Сброс при смене периода — коррекция состояния во время рендера.
+  const [draft, setDraft] = useState({ from, to });
+  const [applied, setApplied] = useState({ from, to });
+  if (applied.from !== from || applied.to !== to) {
+    setApplied({ from, to });
+    setDraft({ from, to });
+  }
 
   function update(patch: Record<string, string | null>) {
     const p = new URLSearchParams(sp.toString());
@@ -50,16 +59,31 @@ export function JournalFilters({
     push(`${pathname}?${p.toString()}`);
   }
 
+  function pick(p: PeriodPreset) {
+    setClicked(p);
+    if (p !== "custom") {
+      update({ period: p, from: null, to: null });
+      return;
+    }
+    // «Период» открывается на текущем окне, а не на сегодняшнем дне.
+    const cur = resolvePeriod({ period: sp.get("period") ?? undefined, from, to });
+    update({ period: "custom", from: cur.fromDate, to: cur.dataToDate });
+  }
+
+  const dirty = period === "custom" && (draft.from !== from || draft.to !== to);
+
   return (
     <div className="flex flex-col gap-3 rounded-lg border p-3">
-      <div className="flex flex-wrap gap-1">
-        {PRESETS.map((p) => (
+      <div className="flex flex-wrap gap-1" role="group" aria-label="Период">
+        {PERIOD_PRESETS.map((p) => (
           <Button
             key={p}
             size="sm"
+            className={BTN}
             variant={period === p ? "default" : "outline"}
+            aria-pressed={period === p}
             loading={pending && clicked === p}
-            onClick={() => { setClicked(p); update({ period: p, ...(p !== "custom" ? { from: null, to: null } : {}) }); }}
+            onClick={() => pick(p)}
           >
             {PERIOD_LABELS[p]}
           </Button>
@@ -68,9 +92,16 @@ export function JournalFilters({
 
       {period === "custom" ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Input type="date" value={from} onChange={(e) => update({ from: e.target.value })} className="h-9 w-auto" />
+          <Input type="date" value={draft.from} aria-label="Период с"
+            onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))} className="h-11 w-auto sm:h-9" />
           <span className="text-muted-foreground">—</span>
-          <Input type="date" value={to} onChange={(e) => update({ to: e.target.value })} className="h-9 w-auto" />
+          <Input type="date" value={draft.to} aria-label="Период по"
+            onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))} className="h-11 w-auto sm:h-9" />
+          <Button size="sm" className={BTN} variant={dirty ? "default" : "outline"}
+            loading={pending && clicked === "apply"}
+            onClick={() => { setClicked("apply"); update({ period: "custom", from: draft.from, to: draft.to }); }}>
+            Применить
+          </Button>
         </div>
       ) : null}
 

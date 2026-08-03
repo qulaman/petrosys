@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAll } from "@/lib/supabase/fetch-all";
 import { getCurrentProfile } from "@/lib/auth/current-user";
-import { resolvePeriod, type ResolvedPeriod } from "@/lib/journals/period";
+import { addDays, countDays, previousPeriod, resolvePeriod, type ResolvedPeriod } from "@/lib/journals/period";
 import { loadClosedJournalIds, loadOpenLineupIds, resolveFuelPrice, resolveRate, tripCounted, type RatePriceRow } from "@/lib/data/money";
 import { aqtobeDate } from "@/lib/tz";
 import { vehicleTypeLabel } from "@/lib/domain";
@@ -307,6 +307,35 @@ function eachDay(fromDate: string, toDate: string): string[] {
 
 const ddmm = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}`;
 
+/**
+ * Виды учёта, к которым относится показатель. Треть парка ведёт оба учёта
+ * (`accounting_type = 'both'`): жёсткое `=== "trips"` выкидывало рейсы таких
+ * машин из тепловой карты, и её подвал расходился с плиткой почти вдвое.
+ * Полевые экраны эту развилку учитывают (см. lib/data/trips.ts, shifts.ts).
+ */
+const tracksTrips = (a: string) => a === "trips" || a === "both";
+const tracksHours = (a: string) => a === "hours" || a === "both";
+
+/**
+ * Дата последней записи в системе — подсказка для периода, в котором данных нет
+ * («Этот месяц» открывается пустым, пока факты идут за прошлый).
+ */
+export async function loadLastActivityDate(): Promise<string | null> {
+  const supabase = await createClient();
+  const [trips, shifts, fuel] = await Promise.all([
+    supabase.from("trip_records").select("created_at").order("created_at", { ascending: false }).limit(1),
+    supabase.from("shift_records").select("shift_date").order("shift_date", { ascending: false }).limit(1),
+    supabase.from("fuel_issues").select("created_at").order("created_at", { ascending: false }).limit(1),
+  ]);
+  const dates = [
+    trips.data?.[0]?.created_at ? aqtobeDate(trips.data[0].created_at) : null,
+    shifts.data?.[0]?.shift_date ?? null,
+    fuel.data?.[0]?.created_at ? aqtobeDate(fuel.data[0].created_at) : null,
+  ].filter((d): d is string => !!d);
+  if (!dates.length) return null;
+  return dates.sort()[dates.length - 1];
+}
+
 export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabData> {
   const supabase = await createClient();
   const [veh, fuelRows, shiftRows, tripRows, openLineups, fuelPricesRes, attentionRes] = await Promise.all([
@@ -330,7 +359,9 @@ export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabDa
     else cur.tanker += Number(r.liters);
     byDay.set(day, cur);
   }
-  const daily: DailyIssue[] = eachDay(period.fromDate, period.toDate).map((d) => {
+  // До сегодняшнего дня, а не до конца периода: «Этот месяц» третьего числа
+  // рисовал 28 пустых столбиков вперёд и выглядел сломанным.
+  const daily: DailyIssue[] = eachDay(period.fromDate, period.dataToDate).map((d) => {
     const c = byDay.get(d) ?? { card: 0, tanker: 0 };
     return { date: d, label: ddmm(d), card: c.card, tanker: c.tanker };
   });
@@ -345,7 +376,7 @@ export async function loadFuelTabData(period: ResolvedPeriod): Promise<FuelTabDa
   const noNormRegs: string[] = [];
   let normFilled = false;
   for (const v of veh.data ?? []) {
-    if (v.accounting_type !== "hours") continue;
+    if (!tracksHours(v.accounting_type)) continue;
     const normVal = v.fuel_norm_per_hour == null ? null : Number(v.fuel_norm_per_hour);
     if (normVal != null) normFilled = true;
     const hours = hoursByVeh.get(v.id) ?? 0;
@@ -508,10 +539,12 @@ export interface WorkSummary {
   /** Перевезено м³ (объёмы из маршрутов); null — объёмы не заполнены. */
   m3Total: number | null;
 }
-/** Те же показатели за предыдущий период такой же длины — база сравнения плиток. */
+/** Те же показатели за предыдущий сопоставимый отрезок — база сравнения плиток. */
 export interface WorkPrev {
   trips: number;
   hours: number;
+  /** Что именно взято за базу: «01.07–03.07» — иначе Δ не с чем соотнести. */
+  label: string;
 }
 export interface WorkTabData {
   buckets: HeatBucket[];
@@ -553,35 +586,29 @@ function toIntervalGroup(reg: string | null, intervals: number[]): IntervalGroup
   };
 }
 
-/** Предыдущий период такой же длины, вплотную к текущему. */
-function previousWindow(fromDate: string, toDate: string) {
-  const len = eachDay(fromDate, toDate).length;
-  const shift = (d: string, n: number) =>
-    new Date(new Date(`${d}T00:00:00Z`).getTime() + n * 864e5).toISOString().slice(0, 10);
-  const prevTo = shift(fromDate, -1);
-  return { prevFrom: shift(prevTo, -(len - 1)), prevTo };
-}
-
 export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabData> {
   const supabase = await createClient();
-  const { prevFrom, prevTo } = previousWindow(period.fromDate, period.toDate);
+  const prev = previousPeriod(period);
   // База сравнения — только два заголовочных числа: рейсы считаем на сервере
   // (head: true — строки не едут), часы тянем одной колонкой.
+  // Машины берём ВСЕ, а не только активные: работа снятой с учёта техники
+  // попадала в плитку, но исчезала из карты, и итоги не сходились.
   const [veh, trips, shifts, routesRes, prevTripsRes, prevShiftsRes] = await Promise.all([
-    supabase.from("vehicles").select("id, reg_number, accounting_type").eq("is_active", true).order("reg_number"),
+    supabase.from("vehicles").select("id, reg_number, accounting_type, is_active").order("reg_number"),
     fetchAll((f, t) => supabase.from("trip_records").select("vehicle_id, created_at, route_id").gte("created_at", period.fromISO).lt("created_at", period.toISO).order("id").range(f, t)),
     fetchAll((f, t) => supabase.from("shift_records").select("vehicle_id, hours, shift_date").gte("shift_date", period.fromDate).lte("shift_date", period.toDate).order("id").range(f, t)),
     supabase.from("routes").select("id, volume_m3"),
     supabase.from("trip_records").select("id", { count: "exact", head: true })
-      .gte("created_at", `${prevFrom}T00:00:00+05:00`).lt("created_at", `${period.fromDate}T00:00:00+05:00`),
-    fetchAll((f, t) => supabase.from("shift_records").select("hours").gte("shift_date", prevFrom).lte("shift_date", prevTo).order("id").range(f, t)),
+      .gte("created_at", `${prev.fromDate}T00:00:00+05:00`).lt("created_at", `${addDays(prev.toDate, 1)}T00:00:00+05:00`),
+    fetchAll((f, t) => supabase.from("shift_records").select("hours").gte("shift_date", prev.fromDate).lte("shift_date", prev.toDate).order("id").range(f, t)),
   ]);
-  const prev: WorkPrev = {
+  const prevSummary: WorkPrev = {
     trips: prevTripsRes.count ?? 0,
     hours: Math.round(prevShiftsRes.reduce((s, r) => s + Number(r.hours), 0) * 10) / 10,
+    label: prev.label,
   };
 
-  const allDays = eachDay(period.fromDate, period.toDate);
+  const allDays = eachDay(period.fromDate, period.dataToDate);
   // > 60 дней — по дням нечитаемо и тяжело: агрегируем колонки в недели.
   const weekly = allDays.length > 60;
   const dayGroups: { label: string; days: string[] }[] = weekly
@@ -608,23 +635,30 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
   // Полностью пустые строки — в отдельный список простоя, работавшие — по итогу.
   // Ступени заливки и итоги по колонкам считает сама карта: она умеет фильтровать
   // строки, и подвал должен сходиться с тем, что осталось на экране.
+  // Машина со смешанным учётом (`both`) попадает в ОБЕ карты: её рейсы и её
+  // моточасы — разные показатели, и прятать одно ради другого нельзя.
   const hoursRows: HeatRow[] = [];
   const tripsRows: HeatRow[] = [];
   const hoursIdle: IdleVehicle[] = [];
   const tripsIdle: IdleVehicle[] = [];
-  for (const v of veh.data ?? []) {
-    const isTrips = v.accounting_type === "trips";
-    const src = isTrips ? tripCount : hoursSum;
+  const place = (
+    v: { id: string; reg_number: string; is_active: boolean },
+    src: Map<string, number>,
+    rows: HeatRow[],
+    idle: IdleVehicle[],
+  ) => {
     const cells = dayGroups.map((g) => {
       const val = g.days.reduce((s, d) => s + (src.get(`${v.id}|${d}`) ?? 0), 0);
       return Math.round(val * 10) / 10;
     });
     const total = Math.round(cells.reduce((s, n) => s + n, 0) * 10) / 10;
-    if (total <= 0) {
-      (isTrips ? tripsIdle : hoursIdle).push({ vehicle_id: v.id, reg: v.reg_number });
-      continue;
-    }
-    (isTrips ? tripsRows : hoursRows).push({ vehicle_id: v.id, reg: v.reg_number, cells, total });
+    if (total > 0) rows.push({ vehicle_id: v.id, reg: v.reg_number, cells, total });
+    // В «простаивавших» только действующая техника: снятая с учёта не простаивает.
+    else if (v.is_active) idle.push({ vehicle_id: v.id, reg: v.reg_number });
+  };
+  for (const v of veh.data ?? []) {
+    if (tracksTrips(v.accounting_type)) place(v, tripCount, tripsRows, tripsIdle);
+    if (tracksHours(v.accounting_type)) place(v, hoursSum, hoursRows, hoursIdle);
   }
   hoursRows.sort((a, b) => b.total - a.total);
   tripsRows.sort((a, b) => b.total - a.total);
@@ -635,8 +669,12 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
   const m3Total = routesFilled
     ? Math.round(trips.reduce((s, t) => s + (routeVolume.get(t.route_id) ?? 0), 0))
     : null;
-  const fleet = (veh.data ?? []).length;
-  const worked = hoursRows.length + tripsRows.length;
+  // Занятость парка — по РАЗНЫМ машинам: со смешанным учётом машина стоит в
+  // обеих картах, и простое сложение строк давало «работало 120 из 100».
+  const workedIds = new Set([...hoursRows, ...tripsRows].map((r) => r.vehicle_id));
+  const activeVeh = (veh.data ?? []).filter((v) => v.is_active);
+  const fleet = activeVeh.length;
+  const worked = activeVeh.filter((v) => workedIds.has(v.id)).length;
   const summary: WorkSummary = {
     tripsTotal: trips.length,
     hoursTotal: Math.round(shifts.reduce((s, r) => s + Number(r.hours), 0) * 10) / 10,
@@ -674,7 +712,7 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
 
   // Выработка самосвалов: среднее рейсов за активный день; медиана по парку.
   const productivity: ProductivityRow[] = (veh.data ?? [])
-    .filter((v) => v.accounting_type === "trips")
+    .filter((v) => tracksTrips(v.accounting_type))
     .map((v) => {
       const perDay = allDays.map((d) => tripCount.get(`${v.id}|${d}`) ?? 0).filter((n) => n > 0);
       const avg = perDay.length ? Math.round((perDay.reduce((s, n) => s + n, 0) / perDay.length) * 10) / 10 : 0;
@@ -687,9 +725,9 @@ export async function loadWorkTabData(period: ResolvedPeriod): Promise<WorkTabDa
     buckets,
     weekly,
     periodFrom: period.fromDate,
-    periodTo: period.toDate,
+    periodTo: period.dataToDate,
     summary,
-    prev,
+    prev: prevSummary,
     hoursRows,
     hoursIdle,
     tripsRows,
@@ -777,10 +815,6 @@ export interface MoneyTabData {
   volumesFilled: boolean;
 }
 
-function daysBetween(a: string, b: string): number {
-  return Math.round((new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / 864e5);
-}
-
 /**
  * Батч-расчёт денег по ВСЕМ договорам за 2 волны параллельных запросов
  * (раньше — loadSettlement в цикле: ~700 мс × число договоров последовательно).
@@ -790,10 +824,11 @@ function daysBetween(a: string, b: string): number {
  */
 export async function loadMoneyTabData(period: ResolvedPeriod): Promise<MoneyTabData> {
   const supabase = await createClient();
-  const today = resolvePeriod({ period: "today" }).fromDate;
-  const totalDays = daysBetween(period.fromDate, period.toDate) + 1;
-  const clampedEnd = today < period.toDate ? (today < period.fromDate ? period.fromDate : today) : period.toDate;
-  const elapsed = Math.max(1, daysBetween(period.fromDate, clampedEnd) + 1);
+  // Прогноз считается до конца периода (месяц закрывается целиком), а средний
+  // темп — по уже прошедшим дням. Вывернутый диапазон сюда больше не доходит:
+  // resolvePeriod разворачивает его, и totalDays не уходит в минус.
+  const totalDays = Math.max(1, countDays(period.fromDate, period.toDate));
+  const elapsed = Math.max(1, countDays(period.fromDate, period.dataToDate));
 
   // Волна 1 — всё независимое, по всей организации разом.
   const [contractsRes, contractorsRes, vehiclesRes, prices, fuelPricesRes, trips, shiftsRows, fuelRows, penaltiesRes, routesRes] =

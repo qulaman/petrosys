@@ -96,7 +96,7 @@ export function VolumeTab({ data: d }: { data: VolumeTabData }) {
   return (
     <div className="flex flex-col gap-5">
       {/* Сводка */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Kpi
           label={`Выполнено из ${fmtInt(s.target_volume_m3)} м³`}
           value={`${fmtInt(d.done)} (${d.donePct}%)`}
