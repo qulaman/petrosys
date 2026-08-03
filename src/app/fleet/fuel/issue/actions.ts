@@ -6,29 +6,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { devError, devLog, IS_DEV } from "@/lib/dev-log";
 import { zUuid } from "@/lib/validation";
 import { dbError } from "@/lib/db-error";
-import type { Database } from "@/lib/supabase/database.types";
 
 /** Сколько минут заправщик может отменить собственную выдачу (совпадает с RLS). */
 const UNDO_WINDOW_MIN = 15;
 
 /** Нарушение уникальности в Postgres — повторная доставка той же выдачи. */
 const UNIQUE_VIOLATION = "23505";
-
-type FuelIssueInsert = Database["public"]["Tables"]["fuel_issues"]["Insert"];
-
-/**
- * Колонки миграции 0030 (client_key, issued_at) есть в БД, но ещё не попали в
- * сгенерированный `database.types.ts`: `supabase gen types` требует либо Docker,
- * либо SUPABASE_ACCESS_TOKEN, и ни того, ни другого на машине сейчас нет.
- *
- * Тип объявлен здесь, а не правкой генерируемого файла (запрещена) и не через
- * `as never` — так все остальные поля вставки остаются проверяемыми.
- * После ближайшей перегенерации типов этот тип и приведение ниже убрать.
- */
-type FuelIssueInsertPending = FuelIssueInsert & {
-  client_key: string | null;
-  issued_at: string | null;
-};
 
 const schema = z.object({
   source_type: z.enum(["card", "tanker"]),
@@ -80,7 +63,7 @@ export async function createFuelIssue(
     return { ok: false, error: "Не выбран бензовоз" };
 
   const supabase = await createClient();
-  const row: FuelIssueInsertPending = {
+  const row = {
     source_type: d.source_type,
     fuel_card_id: d.source_type === "card" ? d.fuel_card_id : null,
     tanker_id: d.source_type === "tanker" ? d.tanker_id : null,
@@ -97,7 +80,7 @@ export async function createFuelIssue(
   };
   const { data, error } = await supabase
     .from("fuel_issues")
-    .insert(row as FuelIssueInsert)
+    .insert(row)
     .select("id")
     .single();
 
