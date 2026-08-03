@@ -81,6 +81,7 @@ export type Database = {
           action: string
           at?: string
           changed_cols?: string[] | null
+          id?: never
           new_row?: Json | null
           old_row?: Json | null
           org_id?: string | null
@@ -92,6 +93,7 @@ export type Database = {
           action?: string
           at?: string
           changed_cols?: string[] | null
+          id?: never
           new_row?: Json | null
           old_row?: Json | null
           org_id?: string | null
@@ -565,6 +567,7 @@ export type Database = {
       }
       fuel_issues: {
         Row: {
+          client_key: string | null
           created_at: string
           driver_id: string
           driver_signature_url: string
@@ -572,6 +575,7 @@ export type Database = {
           geo_lat: number | null
           geo_lng: number | null
           id: string
+          issued_at: string | null
           issued_by: string
           liters: number
           matched_transaction_id: string | null
@@ -583,6 +587,7 @@ export type Database = {
           vehicle_id: string
         }
         Insert: {
+          client_key?: string | null
           created_at?: string
           driver_id: string
           driver_signature_url: string
@@ -590,6 +595,7 @@ export type Database = {
           geo_lat?: number | null
           geo_lng?: number | null
           id?: string
+          issued_at?: string | null
           issued_by?: string
           liters: number
           matched_transaction_id?: string | null
@@ -601,6 +607,7 @@ export type Database = {
           vehicle_id: string
         }
         Update: {
+          client_key?: string | null
           created_at?: string
           driver_id?: string
           driver_signature_url?: string
@@ -608,6 +615,7 @@ export type Database = {
           geo_lat?: number | null
           geo_lng?: number | null
           id?: string
+          issued_at?: string | null
           issued_by?: string
           liters?: number
           matched_transaction_id?: string | null
@@ -1474,17 +1482,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "trip_records_lineup_id_fkey"
-            columns: ["lineup_id"]
-            isOneToOne: false
-            referencedRelation: "trip_lineups"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "trip_records_driver_id_fkey"
             columns: ["driver_id"]
             isOneToOne: false
             referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_records_lineup_id_fkey"
+            columns: ["lineup_id"]
+            isOneToOne: false
+            referencedRelation: "trip_lineups"
             referencedColumns: ["id"]
           },
           {
@@ -1570,20 +1578,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "vehicles_day_driver_id_fkey"
-            columns: ["day_driver_id"]
-            isOneToOne: false
-            referencedRelation: "drivers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "vehicles_night_driver_id_fkey"
-            columns: ["night_driver_id"]
-            isOneToOne: false
-            referencedRelation: "drivers"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "vehicles_contract_id_fkey"
             columns: ["contract_id"]
             isOneToOne: false
@@ -1595,6 +1589,20 @@ export type Database = {
             columns: ["contractor_id"]
             isOneToOne: false
             referencedRelation: "contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_day_driver_id_fkey"
+            columns: ["day_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vehicles_night_driver_id_fkey"
+            columns: ["night_driver_id"]
+            isOneToOne: false
+            referencedRelation: "drivers"
             referencedColumns: ["id"]
           },
           {
