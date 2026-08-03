@@ -117,6 +117,11 @@ export async function AppShell({
           leading={<><BackButton /><TitleIcon /></>}
         />
         {children}
+        {/* Отметка сборки. Полевые телефоны держат PWA в памяти сутками: без неё
+            на «не работает» невозможно ответить, тот ли код вообще запущен. */}
+        <p className="pt-6 text-center text-xs text-muted-foreground">
+          сборка {(process.env.VERCEL_GIT_COMMIT_SHA ?? "локальная").slice(0, 7)}
+        </p>
       </main>
 
       {showBottomNav ? <NavBar items={navItems} variant="bottom" /> : null}

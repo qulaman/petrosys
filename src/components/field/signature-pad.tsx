@@ -38,6 +38,8 @@ interface Diag {
   /** Небелых пикселей на битмапе: отделяет «не видно» от «не нарисовано». */
   ink: number;
   ua: string;
+  /** Исключение при настройке холста — иначе оно молчит и панель пуста. */
+  err: string;
 }
 
 function newDiag(): Diag {
@@ -47,7 +49,7 @@ function newDiag(): Diag {
   return {
     win: 0, canvas: 0, move: 0, up: 0, cancel: 0, touch: 0,
     target: "—", top: "—", last: "—", moveBtn: "—", box: "—",
-    strokes: 0, ink: -1,
+    strokes: 0, ink: -1, err: "",
     ua:
       typeof navigator === "undefined"
         ? "—"
@@ -81,17 +83,34 @@ export function SignaturePad({
   const padRef = useRef<SignaturePadLib | null>(null);
   const [empty, setEmpty] = useState(true);
   const diagRef = useRef<Diag>(newDiag());
-  const [diag, setDiag] = useState<Diag | null>(null);
+  // Панель рисуется всегда, даже если настройка холста упала: пустая панель
+  // сама по себе была бы ответом «код не доехал», и мы бы это не различили.
+  const [diag, setDiag] = useState<Diag>(newDiag);
+  const report = (err: string) => {
+    diagRef.current.err = err;
+    setDiag({ ...diagRef.current });
+  };
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     const box = boxRef.current;
-    if (!canvas || !box) return;
+    if (!canvas || !box) {
+      report("холст не смонтирован");
+      return;
+    }
 
-    const pad = new SignaturePadLib(canvas, {
-      penColor: "#111",
-      backgroundColor: "#fff",
-    });
+    let pad: SignaturePadLib;
+    try {
+      pad = new SignaturePadLib(canvas, {
+        penColor: "#111",
+        backgroundColor: "#fff",
+      });
+    } catch (e) {
+      // Единственный реальный источник — null вместо 2d-контекста (телефон
+      // отдал отказ по памяти). Молча это выглядит как «подпись не работает».
+      report(`конструктор: ${String(e)}`);
+      return;
+    }
     padRef.current = pad;
 
     // Размер холста в CSS-пикселях на момент последней настройки битмапа. Нужен,
@@ -152,8 +171,19 @@ export function SignaturePad({
     // оставался 300×150. Наблюдатель отдаёт размер сразу при observe() и на
     // каждое изменение: поворот, клавиатура, адресная строка — своих слушателей
     // на resize/orientationchange больше не нужно.
-    const ro = new ResizeObserver(fit);
-    ro.observe(canvas);
+    // Если наблюдателя в движке нет (старый WebView) — откатываемся на прежнюю
+    // схему: разовый замер плюс слушатели окна. Без этой ветки конструктор
+    // ResizeObserver бросил бы исключение и подпись не открылась бы вовсе.
+    const hasRO = typeof ResizeObserver !== "undefined";
+    const ro = hasRO ? new ResizeObserver(fit) : null;
+    if (ro) {
+      ro.observe(canvas);
+    } else {
+      diagRef.current.err = "нет ResizeObserver";
+      fit();
+      window.addEventListener("resize", fit);
+      window.addEventListener("orientationchange", fit);
+    }
 
     // Страховка перед штрихом: если размер всё же разошёлся (случай, которого
     // наблюдатель не увидел), пересчитываем ДО того, как signature_pad начнёт
@@ -223,7 +253,9 @@ export function SignaturePad({
     // --- конец диагностики ---
 
     return () => {
-      ro.disconnect();
+      ro?.disconnect();
+      window.removeEventListener("resize", fit);
+      window.removeEventListener("orientationchange", fit);
       box.removeEventListener("pointerdown", fit, true);
       pad.removeEventListener("endStroke", onEnd);
       window.removeEventListener("pointerdown", onWinDown, true);
@@ -256,19 +288,18 @@ export function SignaturePad({
         </p>
       ) : null}
       {/* ВРЕМЕННАЯ ПАНЕЛЬ — убрать вместе с блоком диагностики в эффекте. */}
-      {diag ? (
-        <div className="mx-4 mb-2 rounded-lg border border-warning/40 bg-warning/10 p-2 font-mono text-xs leading-snug break-words">
-          <p>{diag.box}</p>
-          <p>
-            down: окно {diag.win} / холст {diag.canvas} · move {diag.move} · up {diag.up} ·
-            cancel {diag.cancel} · touch {diag.touch}
-          </p>
-          <p>событие: {diag.last} · move {diag.moveBtn}</p>
-          <p>цель: {diag.target} · сверху: {diag.top}</p>
-          <p>штрихов {diag.strokes} · чернил {diag.ink}</p>
-          <p>{diag.ua}</p>
-        </div>
-      ) : null}
+      <div className="mx-4 mb-2 rounded-lg border border-warning/40 bg-warning/10 p-2 font-mono text-xs leading-snug break-words">
+        {diag.err ? <p className="font-bold text-destructive">СБОЙ: {diag.err}</p> : null}
+        <p>{diag.box}</p>
+        <p>
+          down: окно {diag.win} / холст {diag.canvas} · move {diag.move} · up {diag.up} ·
+          cancel {diag.cancel} · touch {diag.touch}
+        </p>
+        <p>событие: {diag.last} · move {diag.moveBtn}</p>
+        <p>цель: {diag.target} · сверху: {diag.top}</p>
+        <p>штрихов {diag.strokes} · чернил {diag.ink}</p>
+        <p>{diag.ua}</p>
+      </div>
       {/* Холст всегда белый с чёрным штрихом — независимо от темы: подпись
           уходит в документы и должна выглядеть одинаково. */}
       <div ref={boxRef} className="mx-4 flex-1 overflow-hidden rounded-lg border bg-white">
