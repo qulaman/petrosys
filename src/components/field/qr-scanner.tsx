@@ -22,8 +22,23 @@ export function QrScanner({
   );
   const handledRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Контейнер камеры держим в состоянии, а не ищем по id из эффекта: содержимое
+   * FullscreenSheet приезжает через портал base-ui на пару коммитов позже, и
+   * `new Html5Qrcode(containerId)` не находил элемент, падал, а catch ниже
+   * превращал это в «камера недоступна» на каждом открытии сканера.
+   */
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+  // Колбэк через ref: в форме выдачи он объявлен телом компонента и меняет
+  // идентичность на каждый рендер — в зависимостях эффекта это перезапускало
+  // камеру.
+  const onDetectedRef = useRef(onDetected);
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+  });
 
   useEffect(() => {
+    if (!host) return;
     let cancelled = false;
 
     (async () => {
@@ -41,7 +56,7 @@ export function QrScanner({
             if (handledRef.current) return;
             handledRef.current = true;
             scanner.stop().then(() => scanner.clear()).catch(() => {});
-            onDetected(decoded);
+            onDetectedRef.current(decoded);
           },
           () => {},
         );
@@ -58,12 +73,12 @@ export function QrScanner({
       const s = scannerRef.current;
       if (s) s.stop().then(() => s.clear()).catch(() => {});
     };
-  }, [onDetected]);
+  }, [host]);
 
   return (
     <FullscreenSheet title="Наведите на QR на борту" onClose={onCancel}>
       <div className="mx-4 flex-1 overflow-hidden rounded-lg border">
-        <div id={containerId} className="h-full w-full" />
+        <div id={containerId} ref={setHost} className="h-full w-full" />
         {error ? (
           <p className="p-4 text-center text-sm text-destructive" role="alert">
             {error}

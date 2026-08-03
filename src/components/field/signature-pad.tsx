@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import SignaturePadLib from "signature_pad";
 import { Button } from "@/components/ui/button";
 import { FullscreenSheet, FullscreenSheetClose } from "@/components/field/fullscreen-sheet";
@@ -79,25 +79,35 @@ export function SignaturePad({
   onCancel: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const boxRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * Счётчик появлений холста в DOM — по нему перезапускается настройка.
+   * FullscreenSheet рендерит содержимое через портал base-ui, а тот отдаёт
+   * детей только после того, как создаст узел портала — на пару коммитов
+   * позже. Эффект с пустыми зависимостями отрабатывал раньше этого, получал
+   * `canvasRef.current === null`, выходил по проверке и больше не повторялся:
+   * signature_pad не создавался вообще. Отсюда «окно открывается, но ничего
+   * не пишется» и вечно серое «Готово».
+   */
+  const [canvasMounted, setCanvasMounted] = useState(0);
+  const attachCanvas = useCallback((el: HTMLCanvasElement | null) => {
+    canvasRef.current = el;
+    if (el) setCanvasMounted((n) => n + 1);
+  }, []);
   const padRef = useRef<SignaturePadLib | null>(null);
   const [empty, setEmpty] = useState(true);
   const diagRef = useRef<Diag>(newDiag());
   // Панель рисуется всегда, даже если настройка холста упала: пустая панель
   // сама по себе была бы ответом «код не доехал», и мы бы это не различили.
   const [diag, setDiag] = useState<Diag>(newDiag);
-  const report = (err: string) => {
-    diagRef.current.err = err;
-    setDiag({ ...diagRef.current });
-  };
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    const box = boxRef.current;
-    if (!canvas || !box) {
-      report("холст не смонтирован");
-      return;
-    }
+    if (!canvas) return;
+    const box = canvas.parentElement;
+    const report = (err: string) => {
+      diagRef.current.err = err;
+      setDiag({ ...diagRef.current });
+    };
 
     let pad: SignaturePadLib;
     try {
@@ -189,7 +199,7 @@ export function SignaturePad({
     // наблюдатель не увидел), пересчитываем ДО того, как signature_pad начнёт
     // писать. Именно capture и именно на обёртке: свой слушатель библиотека
     // вешает на холст в конструкторе, то есть раньше нашего.
-    box.addEventListener("pointerdown", fit, true);
+    box?.addEventListener("pointerdown", fit, true);
 
     const onEnd = () => setEmpty(pad.isEmpty());
     pad.addEventListener("endStroke", onEnd);
@@ -256,7 +266,7 @@ export function SignaturePad({
       ro?.disconnect();
       window.removeEventListener("resize", fit);
       window.removeEventListener("orientationchange", fit);
-      box.removeEventListener("pointerdown", fit, true);
+      box?.removeEventListener("pointerdown", fit, true);
       pad.removeEventListener("endStroke", onEnd);
       window.removeEventListener("pointerdown", onWinDown, true);
       window.removeEventListener("pointermove", onWinMove, true);
@@ -267,7 +277,7 @@ export function SignaturePad({
       clearInterval(tick);
       pad.off();
     };
-  }, []);
+  }, [canvasMounted]);
 
   function clear() {
     padRef.current?.clear();
@@ -302,9 +312,9 @@ export function SignaturePad({
       </div>
       {/* Холст всегда белый с чёрным штрихом — независимо от темы: подпись
           уходит в документы и должна выглядеть одинаково. */}
-      <div ref={boxRef} className="mx-4 flex-1 overflow-hidden rounded-lg border bg-white">
+      <div className="mx-4 flex-1 overflow-hidden rounded-lg border bg-white">
         <canvas
-          ref={canvasRef}
+          ref={attachCanvas}
           aria-label="Поле для подписи пальцем"
           className="h-full w-full touch-none"
         />
