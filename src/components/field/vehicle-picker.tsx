@@ -39,6 +39,12 @@ interface VehiclePickerProps {
   stickyFilters?: boolean;
   /** Блок над вкладками внутри закреплённой области (например, источник топлива). */
   header?: ReactNode;
+  /**
+   * Машины, которые нужно поднять в начало списка (сегодня в работе).
+   * Именно порядок, а не отдельная вкладка: второй ряд переключателей поверх
+   * фильтра по видам техники сбивает — непонятно, какой из них сейчас действует.
+   */
+  priorityIds?: string[];
 }
 
 /**
@@ -59,6 +65,7 @@ export function VehiclePicker({
   tileConfirm,
   stickyFilters = false,
   header,
+  priorityIds,
 }: VehiclePickerProps) {
   const [type, setType] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -74,13 +81,18 @@ export function VehiclePicker({
   const q = search.trim().toLowerCase();
   /** Список отфильтрован пользователем — значит, у пустого результата есть выход. */
   const filtered = q !== "" || effType !== "all";
-  const shown = vehicles.filter(
+  const matched = vehicles.filter(
     (v) =>
       (effType === "all" || v.vehicle_type === effType) &&
       (q === "" ||
         v.reg_number.toLowerCase().includes(q) ||
         v.brand.toLowerCase().includes(q)),
   );
+  // Сортировка устойчивая: внутри групп сохраняется порядок по гос. номеру.
+  const priority = useMemo(() => new Set(priorityIds ?? []), [priorityIds]);
+  const shown = priority.size
+    ? [...matched.filter((v) => priority.has(v.id)), ...matched.filter((v) => !priority.has(v.id))]
+    : matched;
 
   return (
     <div className="flex flex-col gap-2">

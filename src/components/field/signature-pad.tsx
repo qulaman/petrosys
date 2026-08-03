@@ -12,10 +12,17 @@ import { FullscreenSheet, FullscreenSheetClose } from "@/components/field/fullsc
  */
 export function SignaturePad({
   signerName,
+  subject,
   onDone,
   onCancel,
 }: {
   signerName: string;
+  /**
+   * Предмет подписи — что именно человек подтверждает («225 л · 852 AOD»).
+   * Подпись юридически значима, а телефон в этот момент в руках у водителя:
+   * без этой строки он расписывался, не видя ни литров, ни машины.
+   */
+  subject?: string;
   onDone: (svg: string) => void;
   onCancel: () => void;
 }) {
@@ -100,6 +107,11 @@ export function SignaturePad({
 
   return (
     <FullscreenSheet title={`${signerName}, распишитесь`} onClose={onCancel}>
+      {subject ? (
+        <p className="mx-4 mb-2 rounded-lg bg-muted px-3 py-2 text-center text-lg font-bold tabular-nums">
+          {subject}
+        </p>
+      ) : null}
       {/* Холст всегда белый с чёрным штрихом — независимо от темы: подпись
           уходит в документы и должна выглядеть одинаково. */}
       <div className="mx-4 flex-1 overflow-hidden rounded-lg border bg-white">

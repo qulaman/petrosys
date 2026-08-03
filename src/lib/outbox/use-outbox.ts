@@ -93,11 +93,18 @@ export function useOutbox<T>(
    * `id` задаётся, когда повторная правка одного и того же должна заменять
    * предыдущую, а не добавлять вторую запись (часы в табеле: побеждает последнее
    * введённое значение). Без него — обычная новая запись в очереди.
+   *
+   * Возвращает судьбу записи: `sent` — сервер подтвердил, `queued` — лежит на
+   * телефоне и уйдёт при связи. Экран обязан различать это в тексте: «Выдано»
+   * при отсутствии сети было неправдой, человек уходил с подтверждением на
+   * руках. Кто результат не ждёт (тап по плитке рейса), просто не await'ит —
+   * оптимистичная отрисовка не тормозится.
    */
   const add = useCallback(
-    async (payload: T, label: string, id?: string) => {
+    async (payload: T, label: string, id?: string): Promise<"sent" | "queued"> => {
+      const entryId = id ?? crypto.randomUUID();
       await putEntry({
-        id: id ?? crypto.randomUUID(),
+        id: entryId,
         kind,
         payload,
         label,
@@ -107,7 +114,9 @@ export function useOutbox<T>(
       });
       notifyOutboxChanged();
       await refresh();
-      void flush();
+      await flush();
+      const stillQueued = (await entriesOfKind(kind)).some((e) => e.id === entryId);
+      return stillQueued ? "queued" : "sent";
     },
     [kind, refresh, flush],
   );
