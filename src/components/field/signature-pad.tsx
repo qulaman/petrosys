@@ -4,58 +4,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import SignaturePadLib from "signature_pad";
 import { Button } from "@/components/ui/button";
 import { FullscreenSheet, FullscreenSheetClose } from "@/components/field/fullscreen-sheet";
-import { devLog } from "@/lib/dev-log";
-
-/**
- * ВРЕМЕННАЯ ДИАГНОСТИКА. Подпись не рисуется на телефоне заказчика, а по коду
- * причину найти не вышло — панель отвечает на все вопросы разом, без кабеля и
- * консоли: доходят ли события до холста, что у них в `buttons` (signature_pad
- * отбрасывает касания, где бит левой кнопки не выставлен), не лежит ли что-то
- * сверху, совпадает ли битмап с боксом и появляются ли чернила на битмапе.
- * Убрать вместе с панелью в разметке, как только причина закрыта.
- */
-interface Diag {
-  /** pointerdown, пойманные на window в фазе перехвата — до любых обработчиков. */
-  win: number;
-  /** Из них дошедшие до самого холста. Расхождение = событие перехватывают. */
-  canvas: number;
-  move: number;
-  up: number;
-  cancel: number;
-  /** touchstart: приходят ли touch-события, если pointer-события пусты. */
-  touch: number;
-  /** Куда реально прилетел pointerdown. */
-  target: string;
-  /** Что лежит сверху в точке касания (document.elementFromPoint). */
-  top: string;
-  /** pointerType / buttons / isPrimary последнего касания. */
-  last: string;
-  /** buttons на последнем движении: _handlePointerMove требует ровно 1. */
-  moveBtn: string;
-  /** Бокс холста, битмап и плотность. */
-  box: string;
-  strokes: number;
-  /** Небелых пикселей на битмапе: отделяет «не видно» от «не нарисовано». */
-  ink: number;
-  ua: string;
-  /** Исключение при настройке холста — иначе оно молчит и панель пуста. */
-  err: string;
-}
-
-function newDiag(): Diag {
-  const standalone =
-    typeof window !== "undefined" &&
-    window.matchMedia?.("(display-mode: standalone)").matches;
-  return {
-    win: 0, canvas: 0, move: 0, up: 0, cancel: 0, touch: 0,
-    target: "—", top: "—", last: "—", moveBtn: "—", box: "—",
-    strokes: 0, ink: -1, err: "",
-    ua:
-      typeof navigator === "undefined"
-        ? "—"
-        : `${standalone ? "PWA · " : "вкладка · "}${navigator.userAgent.replace(/^Mozilla\/5\.0 \(?/, "").slice(0, 70)}`,
-  };
-}
+import { devLog, devError } from "@/lib/dev-log";
 
 /**
  * Полноэкранная подпись пальцем. Сверху крупно ФИО подписанта, снизу — крупные
@@ -80,13 +29,13 @@ export function SignaturePad({
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   /**
-   * Счётчик появлений холста в DOM — по нему перезапускается настройка.
-   * FullscreenSheet рендерит содержимое через портал base-ui, а тот отдаёт
-   * детей только после того, как создаст узел портала — на пару коммитов
-   * позже. Эффект с пустыми зависимостями отрабатывал раньше этого, получал
-   * `canvasRef.current === null`, выходил по проверке и больше не повторялся:
-   * signature_pad не создавался вообще. Отсюда «окно открывается, но ничего
-   * не пишется» и вечно серое «Готово».
+   * Счётчик появлений холста в DOM — по нему запускается настройка.
+   * FullscreenSheet отдаёт содержимое через портал base-ui, а тот рендерит
+   * детей только после того, как создаст узел портала, — на пару коммитов
+   * позже. Эффект с пустыми зависимостями отрабатывал раньше, получал
+   * `canvasRef.current === null`, молча выходил по проверке и больше не
+   * повторялся: signature_pad не создавался вообще. Три дня это выглядело как
+   * «окно открывается, но ничего не пишется» при вечно сером «Готово».
    */
   const [canvasMounted, setCanvasMounted] = useState(0);
   const attachCanvas = useCallback((el: HTMLCanvasElement | null) => {
@@ -95,19 +44,12 @@ export function SignaturePad({
   }, []);
   const padRef = useRef<SignaturePadLib | null>(null);
   const [empty, setEmpty] = useState(true);
-  const diagRef = useRef<Diag>(newDiag());
-  // Панель рисуется всегда, даже если настройка холста упала: пустая панель
-  // сама по себе была бы ответом «код не доехал», и мы бы это не различили.
-  const [diag, setDiag] = useState<Diag>(newDiag);
+  const [failed, setFailed] = useState(false);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const box = canvas.parentElement;
-    const report = (err: string) => {
-      diagRef.current.err = err;
-      setDiag({ ...diagRef.current });
-    };
 
     let pad: SignaturePadLib;
     try {
@@ -116,9 +58,15 @@ export function SignaturePad({
         backgroundColor: "#fff",
       });
     } catch (e) {
-      // Единственный реальный источник — null вместо 2d-контекста (телефон
-      // отдал отказ по памяти). Молча это выглядит как «подпись не работает».
-      report(`конструктор: ${String(e)}`);
+      // Реальный источник один — null вместо 2d-контекста (телефон отказал по
+      // памяти). Молча это неотличимо от «подпись не работает», а заправщик в
+      // поле должен понимать, что делать.
+      devError("signature-pad", e);
+      // Правило запрещает setState в теле эффекта из-за каскадных рендеров.
+      // Здесь это одноразовая аварийная ветка, и молчать в ней нельзя: именно
+      // молчаливый отказ настройки холста стоил трёх дней разбирательств.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFailed(true);
       return;
     }
     padRef.current = pad;
@@ -131,7 +79,7 @@ export function SignaturePad({
     /**
      * Привести битмап холста к его CSS-боксу. Без этого подпись не видна:
      * signature_pad кладёт точку в CSS-координатах относительно холста
-     * (clientX - rect.left) и рисует их в битмап как есть. Если битмап остался
+     * (clientX - rect.left) и рисует её в битмап как есть. Если битмап остался
      * дефолтным 300×150, а бокс на телефоне ~360×430, всё ниже 150-го пикселя
      * уходит за пределы битмапа — палец водит, а на экране пусто.
      */
@@ -158,8 +106,7 @@ export function SignaturePad({
       canvas.getContext("2d")?.scale(ratio, ratio);
       cssW = width;
       cssH = height;
-      diagRef.current.box = `бокс ${Math.round(width)}×${Math.round(height)} · битмап ${canvas.width}×${canvas.height} · dpr ${window.devicePixelRatio}→${ratio}`;
-      devLog("signature-pad", diagRef.current.box);
+      devLog("signature-pad", `бокс ${Math.round(width)}×${Math.round(height)} · битмап ${canvas.width}×${canvas.height}`);
 
       if (strokes.length) {
         pad.fromData(
@@ -174,22 +121,15 @@ export function SignaturePad({
       setEmpty(pad.isEmpty());
     };
 
-    // ResizeObserver вместо одноразового замера и слушателей window: холст живёт
-    // внутри портала base-ui (FullscreenSheet) и монтируется на пару коммитов
-    // позже формы. Одиночный замер мог прийтись на момент, когда бокса ещё нет,
-    // и молча отваливался по `if (!width || !height)` — битмап навсегда
-    // оставался 300×150. Наблюдатель отдаёт размер сразу при observe() и на
-    // каждое изменение: поворот, клавиатура, адресная строка — своих слушателей
-    // на resize/orientationchange больше не нужно.
-    // Если наблюдателя в движке нет (старый WebView) — откатываемся на прежнюю
-    // схему: разовый замер плюс слушатели окна. Без этой ветки конструктор
-    // ResizeObserver бросил бы исключение и подпись не открылась бы вовсе.
-    const hasRO = typeof ResizeObserver !== "undefined";
-    const ro = hasRO ? new ResizeObserver(fit) : null;
+    // ResizeObserver вместо одноразового замера и слушателей window: размер
+    // приходит сразу при observe() и на каждое изменение бокса — поворот,
+    // клавиатура, адресная строка. Если наблюдателя в движке нет (старый
+    // WebView), откатываемся на прежнюю схему, иначе его конструктор бросил бы
+    // исключение и окно подписи не открылось бы вовсе.
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(fit) : null;
     if (ro) {
       ro.observe(canvas);
     } else {
-      diagRef.current.err = "нет ResizeObserver";
       fit();
       window.addEventListener("resize", fit);
       window.addEventListener("orientationchange", fit);
@@ -204,77 +144,12 @@ export function SignaturePad({
     const onEnd = () => setEmpty(pad.isEmpty());
     pad.addEventListener("endStroke", onEnd);
 
-    // --- ВРЕМЕННАЯ ДИАГНОСТИКА: снять вместе с панелью в разметке ---
-    const d = diagRef.current;
-    const describe = (el: Element | null) => {
-      if (!el) return "—";
-      const cls = typeof el.className === "string" && el.className.trim()
-        ? `.${el.className.trim().split(/\s+/)[0]}`
-        : "";
-      return `${el.tagName.toLowerCase()}${cls}`;
-    };
-    /** Небелые пиксели битмапа — считаем каждый четвёртый, этого хватает. */
-    const countInk = () => {
-      const ctx = canvas.getContext("2d");
-      if (!ctx || !canvas.width || !canvas.height) return -1;
-      try {
-        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        let n = 0;
-        for (let i = 0; i < data.length; i += 16) if (data[i] < 200) n++;
-        return n;
-      } catch {
-        return -2;
-      }
-    };
-    let drawing = false;
-    // window в фазе перехвата — событие видно до любого обработчика и до того,
-    // как его успеет съесть слой сверху.
-    const onWinDown = (e: PointerEvent) => {
-      drawing = true;
-      d.win++;
-      d.last = `${e.pointerType} buttons=${e.buttons} primary=${e.isPrimary}`;
-      d.target = describe(e.target as Element);
-      d.top = describe(document.elementFromPoint(e.clientX, e.clientY));
-    };
-    const onWinMove = (e: PointerEvent) => {
-      if (!drawing) return;
-      d.move++;
-      d.moveBtn = `buttons=${e.buttons}`;
-    };
-    const onWinUp = () => {
-      drawing = false;
-      d.up++;
-      d.strokes = pad.toData().length;
-      d.ink = countInk();
-    };
-    const onWinCancel = () => {
-      drawing = false;
-      d.cancel++;
-    };
-    const onTouch = () => { d.touch++; };
-    const onCanvasDown = () => { d.canvas++; };
-    window.addEventListener("pointerdown", onWinDown, true);
-    window.addEventListener("pointermove", onWinMove, true);
-    window.addEventListener("pointerup", onWinUp, true);
-    window.addEventListener("pointercancel", onWinCancel, true);
-    window.addEventListener("touchstart", onTouch, true);
-    canvas.addEventListener("pointerdown", onCanvasDown);
-    const tick = setInterval(() => setDiag({ ...d }), 400);
-    // --- конец диагностики ---
-
     return () => {
       ro?.disconnect();
       window.removeEventListener("resize", fit);
       window.removeEventListener("orientationchange", fit);
       box?.removeEventListener("pointerdown", fit, true);
       pad.removeEventListener("endStroke", onEnd);
-      window.removeEventListener("pointerdown", onWinDown, true);
-      window.removeEventListener("pointermove", onWinMove, true);
-      window.removeEventListener("pointerup", onWinUp, true);
-      window.removeEventListener("pointercancel", onWinCancel, true);
-      window.removeEventListener("touchstart", onTouch, true);
-      canvas.removeEventListener("pointerdown", onCanvasDown);
-      clearInterval(tick);
       pad.off();
     };
   }, [canvasMounted]);
@@ -297,19 +172,11 @@ export function SignaturePad({
           {subject}
         </p>
       ) : null}
-      {/* ВРЕМЕННАЯ ПАНЕЛЬ — убрать вместе с блоком диагностики в эффекте. */}
-      <div className="mx-4 mb-2 rounded-lg border border-warning/40 bg-warning/10 p-2 font-mono text-xs leading-snug break-words">
-        {diag.err ? <p className="font-bold text-destructive">СБОЙ: {diag.err}</p> : null}
-        <p>{diag.box}</p>
-        <p>
-          down: окно {diag.win} / холст {diag.canvas} · move {diag.move} · up {diag.up} ·
-          cancel {diag.cancel} · touch {diag.touch}
+      {failed ? (
+        <p role="alert" className="mx-4 mb-2 rounded-lg bg-destructive/10 p-3 text-center text-sm text-destructive">
+          Поле подписи не открылось. Закройте окно и попробуйте ещё раз.
         </p>
-        <p>событие: {diag.last} · move {diag.moveBtn}</p>
-        <p>цель: {diag.target} · сверху: {diag.top}</p>
-        <p>штрихов {diag.strokes} · чернил {diag.ink}</p>
-        <p>{diag.ua}</p>
-      </div>
+      ) : null}
       {/* Холст всегда белый с чёрным штрихом — независимо от темы: подпись
           уходит в документы и должна выглядеть одинаково. */}
       <div className="mx-4 flex-1 overflow-hidden rounded-lg border bg-white">
