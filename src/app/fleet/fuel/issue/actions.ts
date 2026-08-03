@@ -6,9 +6,29 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { devError, devLog, IS_DEV } from "@/lib/dev-log";
 import { zUuid } from "@/lib/validation";
 import { dbError } from "@/lib/db-error";
+import type { Database } from "@/lib/supabase/database.types";
 
 /** Сколько минут заправщик может отменить собственную выдачу (совпадает с RLS). */
 const UNDO_WINDOW_MIN = 15;
+
+/** Нарушение уникальности в Postgres — повторная доставка той же выдачи. */
+const UNIQUE_VIOLATION = "23505";
+
+type FuelIssueInsert = Database["public"]["Tables"]["fuel_issues"]["Insert"];
+
+/**
+ * Колонки миграции 0030 (client_key, issued_at) есть в БД, но ещё не попали в
+ * сгенерированный `database.types.ts`: `supabase gen types` требует либо Docker,
+ * либо SUPABASE_ACCESS_TOKEN, и ни того, ни другого на машине сейчас нет.
+ *
+ * Тип объявлен здесь, а не правкой генерируемого файла (запрещена) и не через
+ * `as never` — так все остальные поля вставки остаются проверяемыми.
+ * После ближайшей перегенерации типов этот тип и приведение ниже убрать.
+ */
+type FuelIssueInsertPending = FuelIssueInsert & {
+  client_key: string | null;
+  issued_at: string | null;
+};
 
 const schema = z.object({
   source_type: z.enum(["card", "tanker"]),
@@ -20,6 +40,10 @@ const schema = z.object({
   odometer: z.number().nonnegative().nullable(),
   receipt_path: z.string().nullable(),
   signature_path: z.string().min(1),
+  /** Ключ операции с телефона: досылка из outbox не должна создавать дубль. */
+  client_key: zUuid.nullable().optional(),
+  /** Момент выдачи на телефоне; created_at — время доставки на сервер. */
+  issued_at: z.string().min(1).nullable().optional(),
   // геолокация больше не собирается; поля оставлены для совместимости outbox
   geo_lat: z.number().nullable().optional(),
   geo_lng: z.number().nullable().optional(),
@@ -27,8 +51,9 @@ const schema = z.object({
 
 export type CreateFuelIssueInput = z.infer<typeof schema>;
 
+/** id отсутствует, когда запись уже была создана предыдущей попыткой доставки. */
 export type CreateFuelIssueResult =
-  | { ok: true; id: string }
+  | { ok: true; id?: string }
   | { ok: false; error: string };
 
 export async function createFuelIssue(
@@ -55,25 +80,35 @@ export async function createFuelIssue(
     return { ok: false, error: "Не выбран бензовоз" };
 
   const supabase = await createClient();
+  const row: FuelIssueInsertPending = {
+    source_type: d.source_type,
+    fuel_card_id: d.source_type === "card" ? d.fuel_card_id : null,
+    tanker_id: d.source_type === "tanker" ? d.tanker_id : null,
+    vehicle_id: d.vehicle_id,
+    driver_id: d.driver_id,
+    liters: d.liters,
+    odometer: d.odometer,
+    receipt_photo_url: d.receipt_path,
+    driver_signature_url: d.signature_path,
+    client_key: d.client_key ?? null,
+    issued_at: d.issued_at ?? null,
+    geo_lat: d.geo_lat ?? null,
+    geo_lng: d.geo_lng ?? null,
+  };
   const { data, error } = await supabase
     .from("fuel_issues")
-    .insert({
-      source_type: d.source_type,
-      fuel_card_id: d.source_type === "card" ? d.fuel_card_id : null,
-      tanker_id: d.source_type === "tanker" ? d.tanker_id : null,
-      vehicle_id: d.vehicle_id,
-      driver_id: d.driver_id,
-      liters: d.liters,
-      odometer: d.odometer,
-      receipt_photo_url: d.receipt_path,
-      driver_signature_url: d.signature_path,
-      geo_lat: d.geo_lat ?? null,
-      geo_lng: d.geo_lng ?? null,
-    })
+    .insert(row as FuelIssueInsert)
     .select("id")
     .single();
 
   if (error) {
+    // Повторная доставка той же выдачи: первая попытка дошла, а ответ потерялся.
+    // Это успех, а не ошибка — иначе очередь досылала бы её вечно, и заправщик
+    // видел бы «не отправлено» под уже записанной выдачей.
+    if (error.code === UNIQUE_VIOLATION && d.client_key) {
+      devLog("createFuelIssue", "повтор доставки, запись уже есть:", d.client_key);
+      return { ok: true };
+    }
     devError("createFuelIssue", "ошибка вставки:", error);
     return { ok: false, error: dbError("fleet/fuel/issue/actions", error) };
   }

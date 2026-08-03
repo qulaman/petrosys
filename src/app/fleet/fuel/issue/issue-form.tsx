@@ -53,6 +53,14 @@ interface IssuePayload {
   driver_id: string;
   liters: number;
   odometer: number | null;
+  /**
+   * Ключ операции и момент выдачи создаются ОДИН раз — при постановке в
+   * очередь. Досылка после потерянного ответа отправляет их же: повтор упрётся
+   * в уникальный индекс, а выдача останется в своей смене и своих сутках, даже
+   * если ушла с телефона через несколько часов.
+   */
+  client_key: string;
+  issued_at: string;
 }
 
 export function IssueForm({ data }: { data: FuelIssueData }) {
@@ -125,6 +133,8 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
       odometer: p.odometer,
       receipt_path,
       signature_path,
+      client_key: p.client_key,
+      issued_at: p.issued_at,
     });
   }, []);
   const {
@@ -265,6 +275,8 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
           driver_id: driverId,
           liters: litersNum,
           odometer: odometer ? parseFloat(odometer) : null,
+          client_key: crypto.randomUUID(),
+          issued_at: new Date().toISOString(),
         },
         label,
       );
