@@ -7,6 +7,55 @@ import { FullscreenSheet, FullscreenSheetClose } from "@/components/field/fullsc
 import { devLog } from "@/lib/dev-log";
 
 /**
+ * ВРЕМЕННАЯ ДИАГНОСТИКА. Подпись не рисуется на телефоне заказчика, а по коду
+ * причину найти не вышло — панель отвечает на все вопросы разом, без кабеля и
+ * консоли: доходят ли события до холста, что у них в `buttons` (signature_pad
+ * отбрасывает касания, где бит левой кнопки не выставлен), не лежит ли что-то
+ * сверху, совпадает ли битмап с боксом и появляются ли чернила на битмапе.
+ * Убрать вместе с панелью в разметке, как только причина закрыта.
+ */
+interface Diag {
+  /** pointerdown, пойманные на window в фазе перехвата — до любых обработчиков. */
+  win: number;
+  /** Из них дошедшие до самого холста. Расхождение = событие перехватывают. */
+  canvas: number;
+  move: number;
+  up: number;
+  cancel: number;
+  /** touchstart: приходят ли touch-события, если pointer-события пусты. */
+  touch: number;
+  /** Куда реально прилетел pointerdown. */
+  target: string;
+  /** Что лежит сверху в точке касания (document.elementFromPoint). */
+  top: string;
+  /** pointerType / buttons / isPrimary последнего касания. */
+  last: string;
+  /** buttons на последнем движении: _handlePointerMove требует ровно 1. */
+  moveBtn: string;
+  /** Бокс холста, битмап и плотность. */
+  box: string;
+  strokes: number;
+  /** Небелых пикселей на битмапе: отделяет «не видно» от «не нарисовано». */
+  ink: number;
+  ua: string;
+}
+
+function newDiag(): Diag {
+  const standalone =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(display-mode: standalone)").matches;
+  return {
+    win: 0, canvas: 0, move: 0, up: 0, cancel: 0, touch: 0,
+    target: "—", top: "—", last: "—", moveBtn: "—", box: "—",
+    strokes: 0, ink: -1,
+    ua:
+      typeof navigator === "undefined"
+        ? "—"
+        : `${standalone ? "PWA · " : "вкладка · "}${navigator.userAgent.replace(/^Mozilla\/5\.0 \(?/, "").slice(0, 70)}`,
+  };
+}
+
+/**
  * Полноэкранная подпись пальцем. Сверху крупно ФИО подписанта, снизу — крупные
  * кнопки Очистить/Готово. onDone возвращает SVG-разметку подписи (вектор штрихов:
  * ~2 КБ против ~100 КБ у PNG с retina-канваса — критично для объёма хранилища).
@@ -31,6 +80,8 @@ export function SignaturePad({
   const boxRef = useRef<HTMLDivElement | null>(null);
   const padRef = useRef<SignaturePadLib | null>(null);
   const [empty, setEmpty] = useState(true);
+  const diagRef = useRef<Diag>(newDiag());
+  const [diag, setDiag] = useState<Diag | null>(null);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -78,10 +129,8 @@ export function SignaturePad({
       canvas.getContext("2d")?.scale(ratio, ratio);
       cssW = width;
       cssH = height;
-      devLog("signature-pad", "холст", {
-        css: `${Math.round(width)}×${Math.round(height)}`,
-        bitmap: `${canvas.width}×${canvas.height}`,
-      });
+      diagRef.current.box = `бокс ${Math.round(width)}×${Math.round(height)} · битмап ${canvas.width}×${canvas.height} · dpr ${window.devicePixelRatio}→${ratio}`;
+      devLog("signature-pad", diagRef.current.box);
 
       if (strokes.length) {
         pad.fromData(
@@ -108,17 +157,82 @@ export function SignaturePad({
 
     // Страховка перед штрихом: если размер всё же разошёлся (случай, которого
     // наблюдатель не увидел), пересчитываем ДО того, как signature_pad начнёт
-    // писать. Именно capture и именно на обёртке: свой слушатель на холсте
-    // библиотека вешает в конструкторе, то есть раньше нашего.
+    // писать. Именно capture и именно на обёртке: свой слушатель библиотека
+    // вешает на холст в конструкторе, то есть раньше нашего.
     box.addEventListener("pointerdown", fit, true);
 
     const onEnd = () => setEmpty(pad.isEmpty());
     pad.addEventListener("endStroke", onEnd);
 
+    // --- ВРЕМЕННАЯ ДИАГНОСТИКА: снять вместе с панелью в разметке ---
+    const d = diagRef.current;
+    const describe = (el: Element | null) => {
+      if (!el) return "—";
+      const cls = typeof el.className === "string" && el.className.trim()
+        ? `.${el.className.trim().split(/\s+/)[0]}`
+        : "";
+      return `${el.tagName.toLowerCase()}${cls}`;
+    };
+    /** Небелые пиксели битмапа — считаем каждый четвёртый, этого хватает. */
+    const countInk = () => {
+      const ctx = canvas.getContext("2d");
+      if (!ctx || !canvas.width || !canvas.height) return -1;
+      try {
+        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let n = 0;
+        for (let i = 0; i < data.length; i += 16) if (data[i] < 200) n++;
+        return n;
+      } catch {
+        return -2;
+      }
+    };
+    let drawing = false;
+    // window в фазе перехвата — событие видно до любого обработчика и до того,
+    // как его успеет съесть слой сверху.
+    const onWinDown = (e: PointerEvent) => {
+      drawing = true;
+      d.win++;
+      d.last = `${e.pointerType} buttons=${e.buttons} primary=${e.isPrimary}`;
+      d.target = describe(e.target as Element);
+      d.top = describe(document.elementFromPoint(e.clientX, e.clientY));
+    };
+    const onWinMove = (e: PointerEvent) => {
+      if (!drawing) return;
+      d.move++;
+      d.moveBtn = `buttons=${e.buttons}`;
+    };
+    const onWinUp = () => {
+      drawing = false;
+      d.up++;
+      d.strokes = pad.toData().length;
+      d.ink = countInk();
+    };
+    const onWinCancel = () => {
+      drawing = false;
+      d.cancel++;
+    };
+    const onTouch = () => { d.touch++; };
+    const onCanvasDown = () => { d.canvas++; };
+    window.addEventListener("pointerdown", onWinDown, true);
+    window.addEventListener("pointermove", onWinMove, true);
+    window.addEventListener("pointerup", onWinUp, true);
+    window.addEventListener("pointercancel", onWinCancel, true);
+    window.addEventListener("touchstart", onTouch, true);
+    canvas.addEventListener("pointerdown", onCanvasDown);
+    const tick = setInterval(() => setDiag({ ...d }), 400);
+    // --- конец диагностики ---
+
     return () => {
       ro.disconnect();
       box.removeEventListener("pointerdown", fit, true);
       pad.removeEventListener("endStroke", onEnd);
+      window.removeEventListener("pointerdown", onWinDown, true);
+      window.removeEventListener("pointermove", onWinMove, true);
+      window.removeEventListener("pointerup", onWinUp, true);
+      window.removeEventListener("pointercancel", onWinCancel, true);
+      window.removeEventListener("touchstart", onTouch, true);
+      canvas.removeEventListener("pointerdown", onCanvasDown);
+      clearInterval(tick);
       pad.off();
     };
   }, []);
@@ -140,6 +254,20 @@ export function SignaturePad({
         <p className="mx-4 mb-2 rounded-lg bg-muted px-3 py-2 text-center text-lg font-bold tabular-nums">
           {subject}
         </p>
+      ) : null}
+      {/* ВРЕМЕННАЯ ПАНЕЛЬ — убрать вместе с блоком диагностики в эффекте. */}
+      {diag ? (
+        <div className="mx-4 mb-2 rounded-lg border border-warning/40 bg-warning/10 p-2 font-mono text-xs leading-snug break-words">
+          <p>{diag.box}</p>
+          <p>
+            down: окно {diag.win} / холст {diag.canvas} · move {diag.move} · up {diag.up} ·
+            cancel {diag.cancel} · touch {diag.touch}
+          </p>
+          <p>событие: {diag.last} · move {diag.moveBtn}</p>
+          <p>цель: {diag.target} · сверху: {diag.top}</p>
+          <p>штрихов {diag.strokes} · чернил {diag.ink}</p>
+          <p>{diag.ua}</p>
+        </div>
       ) : null}
       {/* Холст всегда белый с чёрным штрихом — независимо от темы: подпись
           уходит в документы и должна выглядеть одинаково. */}
