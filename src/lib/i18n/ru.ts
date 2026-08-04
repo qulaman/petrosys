@@ -6,6 +6,9 @@ export const ru = {
   app: {
     name: "Arlan Ops",
     tagline: "система управления и учёта производства West Arlan Group",
+    /** Владелец внедрения — «ТОО» в казахской версии станет «ЖШС». */
+    owner: "ТОО «West Arlan Group»",
+    copyright: "ArlanOps by Akdaulet Almas ©",
   },
   common: {
     signIn: "Войти",

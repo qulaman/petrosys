@@ -5,6 +5,7 @@ import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BUILD_SHA, buildLabel } from "@/lib/build-info";
+import { ru } from "@/lib/i18n/ru";
 import { cn } from "@/lib/utils";
 
 /** Как часто спрашивать сервер о свежей сборке. */
@@ -104,6 +105,11 @@ export function BuildBadge({ className }: { className?: string }) {
       >
         <RefreshCw className="size-4" /> Обновить
       </Button>
+      <p className="text-center leading-snug">
+        {ru.app.owner}
+        <br />
+        {ru.app.copyright}
+      </p>
     </div>
   );
 }
