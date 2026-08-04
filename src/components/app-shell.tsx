@@ -9,6 +9,7 @@ import { BackButton } from "@/components/back-button";
 import { NavBar, TitleIcon, type NavItem } from "@/components/nav-bar";
 import { PageHeader } from "@/components/ui/page-header";
 import { OutboxIndicator } from "@/components/field/outbox-indicator";
+import { BuildBadge, UpdateBanner } from "@/components/build-badge";
 import { ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import { ru } from "@/lib/i18n/ru";
 
@@ -110,6 +111,7 @@ export async function AppShell({
       </div>
 
       <main className={cn("flex-1 p-4", showBottomNav ? "pb-24" : "")}>
+        <UpdateBanner />
         <PageHeader
           title={title}
           description={description}
@@ -117,11 +119,7 @@ export async function AppShell({
           leading={<><BackButton /><TitleIcon /></>}
         />
         {children}
-        {/* Отметка сборки. Полевые телефоны держат PWA в памяти сутками: без неё
-            на «не работает» невозможно ответить, тот ли код вообще запущен. */}
-        <p className="pt-6 text-center text-xs text-muted-foreground">
-          сборка {(process.env.VERCEL_GIT_COMMIT_SHA ?? "локальная").slice(0, 7)}
-        </p>
+        <BuildBadge className="pt-6" />
       </main>
 
       {showBottomNav ? <NavBar items={navItems} variant="bottom" /> : null}

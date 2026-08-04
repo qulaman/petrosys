@@ -7,6 +7,7 @@ import { Logo } from "@/components/brand/logo";
 import { BackButton } from "@/components/back-button";
 import { NavBar, TitleIcon, type NavItem } from "@/components/nav-bar";
 import { PageHeader } from "@/components/ui/page-header";
+import { BuildBadge, UpdateBanner } from "@/components/build-badge";
 import { ru } from "@/lib/i18n/ru";
 
 const NAV: NavItem[] = [
@@ -52,12 +53,14 @@ export async function PortalShell({
       <NavBar items={NAV} variant="top" />
 
       <main className="flex-1 p-4">
+        <UpdateBanner />
         <PageHeader
           title={title}
           description={description}
           leading={<><BackButton /><TitleIcon /></>}
         />
         {children}
+        <BuildBadge className="pt-6" />
       </main>
     </div>
   );

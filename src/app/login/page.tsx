@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WagMonogram } from "@/components/brand/logo-mark";
+import { BuildBadge } from "@/components/build-badge";
 import { LoginForm } from "./login-form";
 import { getCurrentProfile } from "@/lib/auth/current-user";
 import { homePathForRoles } from "@/lib/auth/roles";
@@ -31,7 +32,7 @@ export default async function LoginPage() {
       <div className="relative flex justify-end p-4">
         <ThemeToggle />
       </div>
-      <div className="relative flex flex-1 items-center justify-center px-4 pb-16">
+      <div className="relative flex flex-1 flex-col items-center justify-center gap-4 px-4 pb-16">
         <Card className="w-full max-w-sm">
           <CardHeader className="items-center text-center">
             <WagMonogram className="mx-auto mb-2 h-14 w-16 text-primary" />
@@ -45,6 +46,8 @@ export default async function LoginPage() {
             <LoginForm />
           </CardContent>
         </Card>
+        {/* Версия на входе: её называют по телефону, когда что-то «не работает». */}
+        <BuildBadge />
       </div>
     </div>
   );
