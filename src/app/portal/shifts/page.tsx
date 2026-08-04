@@ -1,5 +1,6 @@
 import { PortalShell } from "@/components/portal-shell";
 import { PeriodSelector } from "@/components/period-selector";
+import { ShiftLabel } from "@/components/domain-labels";
 import { resolvePeriod } from "@/lib/journals/period";
 import { loadShiftJournal } from "@/lib/data/journals";
 
@@ -29,7 +30,7 @@ export default async function PortalShifts({ searchParams }: { searchParams: Pro
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td className="whitespace-nowrap px-3 py-2">{r.date}</td>
-                  <td className="px-3 py-2">{r.shift === "day" ? "День" : "Ночь"}</td>
+                  <td className="px-3 py-2"><ShiftLabel shift={r.shift} /></td>
                   <td className="px-3 py-2 font-medium">{r.reg}</td>
                   <td className="px-3 py-2">{r.driver}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{r.hours}</td>

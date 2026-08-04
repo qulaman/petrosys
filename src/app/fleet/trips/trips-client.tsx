@@ -12,6 +12,7 @@ import { GroupLabel } from "@/components/ui/group-label";
 import { QrScanner } from "@/components/field/qr-scanner";
 import { SignaturePad } from "@/components/field/signature-pad";
 import { VehiclePicker } from "@/components/field/vehicle-picker";
+import { SHIFT_ICONS } from "@/components/domain-labels";
 import { useNavProgress } from "@/components/nav-progress";
 import { useConfirm } from "@/components/ui/confirm-dialog";
 import { ru } from "@/lib/i18n/ru";
@@ -22,6 +23,9 @@ import { driverPoolFor, type Vehicle } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { TripsScreenData } from "@/lib/data/trips";
 import { addLineupVehicle, closeTripJournal, createLineup, createTrip, deleteShiftTrips, deleteTrip, deleteTripJournal, deleteTrips, inheritLineupVehicles, removeLineupVehicle, reopenTripJournal } from "./actions";
+
+const DayIcon = SHIFT_ICONS.day;
+const NightIcon = SHIFT_ICONS.night;
 
 const ROUTE_KEY = "qo-trip-route";
 
@@ -1002,9 +1006,17 @@ function ShiftPicker({
       </div>
       <div className="flex flex-col gap-1.5" role="group" aria-labelledby="tr-shift-label">
         <GroupLabel id="tr-shift-label">Смена</GroupLabel>
+        {/* Солнце/луна — см. тот же блок в табеле: две кнопки рядом различаются
+            значком, а не единственным словом. */}
         <div className="grid grid-cols-2 gap-1">
-          <Button type="button" className="h-12" variant={shift === "day" ? "default" : "outline"} onClick={() => onChange(date, "day")}>День</Button>
-          <Button type="button" className="h-12" variant={shift === "night" ? "default" : "outline"} onClick={() => onChange(date, "night")}>Ночь</Button>
+          <Button type="button" className="h-12" variant={shift === "day" ? "default" : "outline"}
+            aria-pressed={shift === "day"} onClick={() => onChange(date, "day")}>
+            <DayIcon className="size-5" />День
+          </Button>
+          <Button type="button" className="h-12" variant={shift === "night" ? "default" : "outline"}
+            aria-pressed={shift === "night"} onClick={() => onChange(date, "night")}>
+            <NightIcon className="size-5" />Ночь
+          </Button>
         </div>
       </div>
     </div>

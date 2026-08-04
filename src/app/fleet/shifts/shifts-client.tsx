@@ -15,11 +15,15 @@ import { OutboxList } from "@/components/field/outbox-list";
 import { ru } from "@/lib/i18n/ru";
 import { useOutbox, type SubmitResult } from "@/lib/outbox/use-outbox";
 import { useConfirm } from "@/components/ui/confirm-dialog";
+import { SHIFT_ICONS } from "@/components/domain-labels";
 import { uploadSignature } from "@/lib/storage/upload";
 import { driverGroups, driverPoolFor, vehicleTypeLabel } from "@/lib/domain";
 import { devError } from "@/lib/dev-log";
 import type { JournalLine, ShiftJournalData } from "@/lib/data/shifts";
 import { addLine, closeJournal, createJournal, removeLine, reopenJournal, updateJournal, updateLine } from "./actions";
+
+const DayIcon = SHIFT_ICONS.day;
+const NightIcon = SHIFT_ICONS.night;
 import { TIME_ZONE } from "@/lib/format";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -410,9 +414,17 @@ function ShiftPicker({
       </div>
       <div className="flex flex-col gap-1.5" role="group" aria-labelledby="shift-label">
         <GroupLabel id="shift-label">Смена</GroupLabel>
+        {/* Солнце/луна: кнопки стоят рядом и отличались одним словом — под
+            солнцем и в перчатках промах по соседней был обычным делом. */}
         <div className="grid grid-cols-2 gap-1">
-          <Button type="button" className="h-12" variant={shift === "day" ? "default" : "outline"} onClick={() => onChange(date, "day")}>День</Button>
-          <Button type="button" className="h-12" variant={shift === "night" ? "default" : "outline"} onClick={() => onChange(date, "night")}>Ночь</Button>
+          <Button type="button" className="h-12" variant={shift === "day" ? "default" : "outline"}
+            aria-pressed={shift === "day"} onClick={() => onChange(date, "day")}>
+            <DayIcon className="size-5" />День
+          </Button>
+          <Button type="button" className="h-12" variant={shift === "night" ? "default" : "outline"}
+            aria-pressed={shift === "night"} onClick={() => onChange(date, "night")}>
+            <NightIcon className="size-5" />Ночь
+          </Button>
         </div>
       </div>
     </div>

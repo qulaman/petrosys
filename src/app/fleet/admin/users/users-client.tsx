@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GroupLabel } from "@/components/ui/group-label";
 import { toast } from "sonner";
-import { ROLES, ROLE_LABELS, type Role } from "@/lib/auth/roles";
+import { ROLES, type Role } from "@/lib/auth/roles";
+import { RoleLabel } from "@/components/domain-labels";
 import type { AppUser, UsersScreenData } from "@/lib/data/users";
 import { createUserAction, updateUserAction } from "./actions";
 
@@ -138,7 +139,7 @@ export function UsersClient({ data }: { data: UsersScreenData }) {
                   }`}>
                   <input type="checkbox" checked={form.roles.includes(r)}
                     onChange={() => toggleRole(r)} className="size-4" />
-                  {ROLE_LABELS[r]}
+                  <RoleLabel role={r} />
                 </label>
               ))}
             </div>
@@ -183,8 +184,16 @@ export function UsersClient({ data }: { data: UsersScreenData }) {
               <tr key={u.id}>
                 <td className="px-3 py-2">{u.full_name ?? "—"}</td>
                 <td className="px-3 py-2">{u.email ?? "—"}</td>
+                {/* Роли — списком со значками: у пользователя их бывает
+                    несколько, и склеенная строка читалась одним пятном. */}
                 <td className="px-3 py-2">
-                  {u.roles.map((r) => ROLE_LABELS[r as Role] ?? r).join(", ") || "—"}
+                  {u.roles.length ? (
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      {u.roles.map((r) => <RoleLabel key={r} role={r} />)}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>

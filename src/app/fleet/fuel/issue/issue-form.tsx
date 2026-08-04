@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
-import { Camera, Check, Clock, CreditCard, Fuel, Images, ScanLine } from "lucide-react";
+import { Camera, Check, Clock, Images, ScanLine } from "lucide-react";
+import { FUEL_SOURCE_ICONS } from "@/components/domain-labels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,9 @@ import type { FuelIssueData } from "@/lib/data/fuel-issue";
 import { createFuelIssue, undoLastFuelIssue } from "./actions";
 
 const LAST_SOURCE_KEY = "qo-last-source";
+
+const CardIcon = FUEL_SOURCE_ICONS.card;
+const TankerIcon = FUEL_SOURCE_ICONS.tanker;
 
 /**
  * Окно повторной заправки. Повтор в течение смены законен (за июль — 30 случаев),
@@ -331,10 +335,9 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
       tabIndex={-1}
     >
       <GroupLabel id="source-label">Источник топлива</GroupLabel>
-      {/* Иконки те же, что закреплены за этими сущностями в остальной системе:
-          CreditCard — топливные карты (см. справочник /fleet/admin/fuel_cards),
-          Fuel — бензовоз (см. меню). Один предмет — одна иконка везде, иначе на
-          полевом экране приходится читать, а не узнавать. */}
+      {/* Иконки берутся из общей карты источников (components/domain-labels):
+          тот же значок стоит в журнале ГСМ у офиса. Один предмет — один значок
+          везде, иначе на полевом экране приходится читать, а не узнавать. */}
       <div className="flex flex-wrap gap-2">
         {cards.map((c) => {
           const key = `card:${c.id}`;
@@ -347,7 +350,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
               aria-pressed={sourceKey === key}
               onClick={() => chooseSource(key)}
             >
-              <CreditCard className="size-5" />
+              <CardIcon className="size-5" />
               {c.card_number}
             </Button>
           );
@@ -363,7 +366,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
               aria-pressed={sourceKey === key}
               onClick={() => chooseSource(key)}
             >
-              <Fuel className="size-5" />
+              <TankerIcon className="size-5" />
               {t.name}
             </Button>
           );

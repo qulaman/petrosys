@@ -16,6 +16,7 @@ import {
 import { SignatureThumb, useSignedUrls } from "@/components/journals/signature-thumb";
 import { downloadCsv } from "@/lib/journals/csv";
 import { fmtInt } from "@/lib/format";
+import { ShiftLabel } from "@/components/domain-labels";
 import type { ShiftJournalRow } from "@/lib/data/journals";
 import { adminDeleteShiftRecord, adminUpdateShiftRecord } from "@/app/fleet/journals/admin-actions";
 
@@ -150,7 +151,7 @@ export function ShiftJournal({
                     </span>
                   ) : null}
                 </td>
-                <td className="px-3 py-2">{r.shift === "day" ? "День" : "Ночь"}</td>
+                <td className="px-3 py-2"><ShiftLabel shift={r.shift} /></td>
                 <td className="px-3 py-2 font-medium">{r.reg}</td>
                 <td className="px-3 py-2">{r.driver}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.hours}</td>

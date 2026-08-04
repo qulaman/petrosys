@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Download } from "lucide-react";
 import { toast } from "sonner";
 import { getDocumentUrl } from "@/app/fleet/office/documents/actions";
 import { unexpectedError } from "@/lib/db-error";
@@ -21,7 +22,13 @@ export function DocDownload({ docId }: { docId: string }) {
     }
   }
   return (
-    <button onClick={open} disabled={loading} className="text-sm text-primary underline disabled:opacity-50">
+    // Значок тот же, что у выгрузок CSV в журналах: одно действие — один вид.
+    <button
+      onClick={open}
+      disabled={loading}
+      className="inline-flex min-h-11 items-center gap-1.5 text-sm text-primary underline disabled:opacity-50"
+    >
+      <Download className="size-4 shrink-0" />
       {loading ? "…" : "Скачать"}
     </button>
   );

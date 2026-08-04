@@ -15,9 +15,13 @@ import {
 import { AttachmentLink } from "@/components/journals/attachment-link";
 import { SignatureThumb, useSignedUrls } from "@/components/journals/signature-thumb";
 import { downloadCsv } from "@/lib/journals/csv";
+import { FUEL_SOURCE_ICONS, FuelSourceLabel } from "@/components/domain-labels";
 import { fmtDateTime, fmtInt, fmtLiters } from "@/lib/format";
 import type { FuelJournalRow } from "@/lib/data/journals";
 import { adminDeleteFuelIssue, adminUpdateFuelIssue } from "@/app/fleet/journals/admin-actions";
+
+const CardIcon = FUEL_SOURCE_ICONS.card;
+const TankerIcon = FUEL_SOURCE_ICONS.tanker;
 
 export function FuelJournal({
   rows,
@@ -101,8 +105,14 @@ export function FuelJournal({
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex flex-wrap gap-2 text-sm">
           <span className="rounded-md border px-2.5 py-1">Выдано <b className="tabular-nums">{fmtLiters(total)}</b></span>
-          <span className="rounded-md border px-2.5 py-1 text-muted-foreground">карта <b className="tabular-nums">{fmtInt(card)}</b></span>
-          <span className="rounded-md border px-2.5 py-1 text-muted-foreground">бензовоз <b className="tabular-nums">{fmtInt(total - card)}</b></span>
+          {/* Значки те же, что на кнопках выбора источника в выдаче ГСМ: одна
+              вещь — один значок и у заправщика, и у офиса. */}
+          <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-muted-foreground">
+            <CardIcon className="size-4 shrink-0" />карта <b className="tabular-nums">{fmtInt(card)}</b>
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-muted-foreground">
+            <TankerIcon className="size-4 shrink-0" />бензовоз <b className="tabular-nums">{fmtInt(total - card)}</b>
+          </span>
           <span className="rounded-md border px-2.5 py-1 text-muted-foreground">машин <b className="tabular-nums">{vehiclesCount}</b></span>
           <span className="rounded-md border px-2.5 py-1 text-muted-foreground">записей <b className="tabular-nums">{rows.length}</b></span>
         </div>
@@ -147,7 +157,7 @@ export function FuelJournal({
                 <td className="px-3 py-2 font-medium">{r.reg}</td>
                 <td className="px-3 py-2">{r.driver}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{fmtLiters(r.liters)}</td>
-                <td className="px-3 py-2">{r.source === "card" ? "Карта" : "Бензовоз"}: {r.source_name}</td>
+                <td className="px-3 py-2"><FuelSourceLabel source={r.source} sub={r.source_name} /></td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.odometer ?? "—"}</td>
                 <td className="px-3 py-2 text-muted-foreground">{r.issuedBy}</td>
                 <td className="px-3 py-2"><AttachmentLink bucket="receipts" path={r.receipt_path} label="Открыть" /></td>
