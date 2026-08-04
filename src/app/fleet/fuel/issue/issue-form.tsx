@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
-import { Camera, Check, Clock, Images, ScanLine } from "lucide-react";
+import { Camera, Check, Clock, CreditCard, Fuel, Images, ScanLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -331,6 +331,10 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
       tabIndex={-1}
     >
       <GroupLabel id="source-label">Источник топлива</GroupLabel>
+      {/* Иконки те же, что закреплены за этими сущностями в остальной системе:
+          CreditCard — топливные карты (см. справочник /fleet/admin/fuel_cards),
+          Fuel — бензовоз (см. меню). Один предмет — одна иконка везде, иначе на
+          полевом экране приходится читать, а не узнавать. */}
       <div className="flex flex-wrap gap-2">
         {cards.map((c) => {
           const key = `card:${c.id}`;
@@ -343,6 +347,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
               aria-pressed={sourceKey === key}
               onClick={() => chooseSource(key)}
             >
+              <CreditCard className="size-5" />
               {c.card_number}
             </Button>
           );
@@ -358,6 +363,7 @@ export function IssueForm({ data }: { data: FuelIssueData }) {
               aria-pressed={sourceKey === key}
               onClick={() => chooseSource(key)}
             >
+              <Fuel className="size-5" />
               {t.name}
             </Button>
           );
